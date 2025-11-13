@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: smartmeetingroom-db
+    environment:
+      POSTGRES_USER: smart_user
+      POSTGRES_PASSWORD: smart_password
+      POSTGRES_DB: smart_meeting
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

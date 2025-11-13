@@ -1,4 +1,13 @@
-from fastapi import FastAPI
+from typing import List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from . import models, schemas
+from .auth import require_roles
+from .database import Base, engine, get_db
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Rooms Service", version="1.0.0")
 
@@ -6,3 +15,149 @@ app = FastAPI(title="Rooms Service", version="1.0.0")
 @app.get("/")
 def root():
     return {"service": "rooms", "status": "running"}
+
+
+admin_or_facility = require_roles("admin", "facility_manager")
+
+
+# ---------- Create room ----------
+
+
+@app.post("/rooms", response_model=schemas.RoomRead, status_code=status.HTTP_201_CREATED)
+def create_room(
+    room_in: schemas.RoomCreate,
+    db: Session = Depends(get_db),
+    _: dict = Depends(admin_or_facility),
+):
+    # ensure unique name
+    existing = db.query(models.Room).filter(models.Room.name == room_in.name).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Room with this name already exists",
+        )
+
+    room = models.Room(
+        name=room_in.name,
+        capacity=room_in.capacity,
+        equipment=room_in.equipment,
+        location=room_in.location,
+    )
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+    return room
+
+
+# ---------- List / search rooms ----------
+
+
+@app.get("/rooms", response_model=List[schemas.RoomRead])
+def list_rooms(
+    min_capacity: Optional[int] = Query(default=None, ge=1),
+    location: Optional[str] = None,
+    equipment_contains: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve available rooms.
+
+    - Filter by min_capacity
+    - Filter by location substring
+    - Filter by equipment substring (e.g. 'projector')
+    - Excludes rooms marked out_of_service
+    """
+    query = db.query(models.Room).filter(models.Room.is_active.is_(True))
+
+    if min_capacity is not None:
+        query = query.filter(models.Room.capacity >= min_capacity)
+
+    if location:
+        query = query.filter(models.Room.location.ilike(f"%{location}%"))
+
+    if equipment_contains:
+        query = query.filter(models.Room.equipment.ilike(f"%{equipment_contains}%"))
+
+    # Exclude out-of-service rooms from "available" search
+    query = query.filter(models.Room.is_out_of_service.is_(False))
+
+    return query.all()
+
+
+@app.get("/rooms/{room_id}", response_model=schemas.RoomRead)
+def get_room(room_id: int, db: Session = Depends(get_db)):
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room or not room.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+    return room
+
+
+# ---------- Update / delete rooms (admin or facility manager) ----------
+
+
+@app.put("/rooms/{room_id}", response_model=schemas.RoomRead)
+def update_room(
+    room_id: int,
+    update_data: schemas.RoomUpdate,
+    db: Session = Depends(get_db),
+    _: dict = Depends(admin_or_facility),
+):
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room or not room.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    if update_data.name is not None:
+        room.name = update_data.name
+    if update_data.capacity is not None:
+        room.capacity = update_data.capacity
+    if update_data.equipment is not None:
+        room.equipment = update_data.equipment
+    if update_data.location is not None:
+        room.location = update_data.location
+    if update_data.is_out_of_service is not None:
+        room.is_out_of_service = update_data.is_out_of_service
+
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+    return room
+
+
+@app.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_room(
+    room_id: int,
+    db: Session = Depends(get_db),
+    _: dict = Depends(admin_or_facility),
+):
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room or not room.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    # soft-delete: mark inactive
+    room.is_active = False
+    db.add(room)
+    db.commit()
+    return
+
+
+# ---------- Room status (stub for now) ----------
+
+
+@app.get("/rooms/{room_id}/status")
+def room_status(room_id: int, db: Session = Depends(get_db)):
+    """
+    Room status: 'available' or 'out_of_service' for now.
+
+    Later, when Bookings is implemented, we'll also check
+    if the room is booked at a given time.
+    """
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room or not room.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    if room.is_out_of_service:
+        status_str = "out_of_service"
+    else:
+        status_str = "available"  # later also consider bookings
+
+    return {"room_id": room.id, "status": status_str}

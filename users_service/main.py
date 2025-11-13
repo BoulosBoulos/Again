@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from . import models, schemas
 from .auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    authenticate_user,
     create_access_token,
     get_current_user,
     get_password_hash,
-    verify_password,
     require_roles,
 )
 from .database import Base, engine, get_db
@@ -29,7 +29,6 @@ def root():
 
 
 # ---------- Registration ----------
-
 
 @app.post(
     "/users/register",
@@ -68,35 +67,33 @@ def register_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
 
 # ---------- Login (token) ----------
 
-
 @app.post("/users/login", response_model=schemas.Token)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    user = (
-        db.query(models.User)
-        .filter(models.User.username == form_data.username)
-        .first()
-    )
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    # Store role as string in the token (user.role.value)
     access_token = create_access_token(
-        data={"sub": user.username, "role": user.role.value},
+        data={
+            "sub": user.username,
+            "role": user.role.value,
+        },
         expires_delta=access_token_expires,
     )
 
-        
-    return schemas.Token(access_token=access_token)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 # ---------- Current user profile (Regular user) ----------
-
 
 @app.get("/users/me", response_model=schemas.UserRead)
 def get_my_profile(current_user: models.User = Depends(get_current_user)):
@@ -132,11 +129,10 @@ def delete_my_account(
 
 # ---------- Admin-only helpers ----------
 
-admin_only = require_roles(UserRole.ADMIN)
+admin_only = require_roles([UserRole.ADMIN])
 
 
 # ---------- Admin: list users, get by username, delete ----------
-
 
 @app.get("/users", response_model=List[schemas.UserRead])
 def list_users(
@@ -148,7 +144,7 @@ def list_users(
 
 
 @app.get("/users/{username}", response_model=schemas.UserRead)
-def get_user_by_username(
+def get_user_by_username_admin(
     username: str,
     db: Session = Depends(get_db),
     _: models.User = Depends(admin_only),
@@ -203,7 +199,6 @@ def change_user_role(
 
 # ---------- Booking history (stub for now) ----------
 
-
 @app.get("/users/{user_id}/booking-history")
 def get_user_booking_history(
     user_id: int,
@@ -212,8 +207,8 @@ def get_user_booking_history(
     """
     View booking history for a user.
 
-    - Regular user: can only see **their own** history.
-    - Admin: can see **any** user's history.
+    - Regular user: can only see their own history.
+    - Admin: can see any user's history.
     """
     if current_user.role != UserRole.ADMIN and current_user.id != user_id:
         raise HTTPException(
@@ -221,10 +216,7 @@ def get_user_booking_history(
             detail="Not allowed to view other users' booking history",
         )
 
-    # TODO: when Bookings Service is implemented:
-    # - call /bookings/user/{user_id} on the Bookings service
-    # - return that data here.
-    # For now, return a placeholder structure.
+    # TODO: integrate with Bookings service.
     return {
         "user_id": user_id,
         "bookings": [],
