@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime, timedelta
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if PROJECT_ROOT not in sys.path:
@@ -7,123 +8,190 @@ if PROJECT_ROOT not in sys.path:
 
 import pytest
 from fastapi.testclient import TestClient
+from jose import jwt
 
-from users_service.main import app
-from users_service.database import Base, engine
+from rooms_service.main import app
+from rooms_service.database import Base, engine
+
+# MUST MATCH users_service.auth AND rooms_service.auth
+SECRET_KEY = "super-secret-smart-meeting-room-key"
+ALGORITHM = "HS256"
+
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def reset_db():
     """
-    Clean the users table before each test.
-    We drop & recreate all tables for simplicity.
+    Clean the rooms table before each test.
     """
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
-    # optional cleanup after each test
     Base.metadata.drop_all(bind=engine)
 
 
-def register_user(username: str, email: str, role: str = "regular", password: str = "test1234"):
+def make_token(username: str, role: str) -> str:
+    """
+    Create a JWT compatible with users_service + rooms_service.
+    """
     payload = {
-        "name": f"{username} Name",
-        "username": username,
-        "email": email,
+        "sub": username,
         "role": role,
-        "password": password,
+        "exp": datetime.utcnow() + timedelta(minutes=15),
     }
-    response = client.post("/users/register", json=payload)
-    assert response.status_code == 201
-    return response.json()
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def login_and_get_token(username: str, password: str):
-    # login uses form data, not JSON
-    data = {"username": username, "password": password}
-    response = client.post("/users/login", data=data)
-    assert response.status_code == 200
-    body = response.json()
-    assert "access_token" in body
-    return body["access_token"]
-
-
-def test_register_user_success():
-    res = client.post(
-        "/users/register",
-        json={
-            "name": "Admin User",
-            "username": "admin1",
-            "email": "admin1@example.com",
-            "role": "admin",
-            "password": "admin123",
-        },
-    )
-    assert res.status_code == 201
-    body = res.json()
-    assert body["username"] == "admin1"
-    assert body["email"] == "admin1@example.com"
-    assert body["role"] == "admin"
-    # password should NOT be in the response
-    assert "hashed_password" not in body
-    assert "password" not in body
-
-
-def test_register_duplicate_username_fails():
-    register_user("user1", "user1@example.com")
-    # same username, different email
-    res = client.post(
-        "/users/register",
-        json={
-            "name": "Other User",
-            "username": "user1",
-            "email": "other@example.com",
-            "role": "regular",
-            "password": "test1234",
-        },
-    )
-    assert res.status_code == 400
-    body = res.json()
-    assert "exists" in body["detail"].lower()
-
-
-def test_login_and_get_me():
-    # create user then login
-    register_user("user1", "user1@example.com", role="regular", password="user1234")
-    token = login_and_get_token("user1", "user1234")
-
-    # call /users/me with Bearer token
-    headers = {"Authorization": f"Bearer {token}"}
-    res = client.get("/users/me", headers=headers)
-    assert res.status_code == 200
-    body = res.json()
-    assert body["username"] == "user1"
-    assert body["email"] == "user1@example.com"
-    assert body["role"] == "regular"
-
-
-def test_regular_user_cannot_list_all_users():
-    # regular user
-    register_user("user1", "user1@example.com", role="regular", password="user1234")
-    token = login_and_get_token("user1", "user1234")
-
-    headers = {"Authorization": f"Bearer {token}"}
-    res = client.get("/users", headers=headers)
+def test_create_room_requires_auth():
+    payload = {
+        "name": "Room A",
+        "capacity": 10,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res = client.post("/rooms", json=payload)
+    # HTTPBearer returns 403 when missing credentials
     assert res.status_code == 403
 
 
-def test_admin_can_list_all_users():
-    # create admin + regular
-    register_user("admin1", "admin1@example.com", role="admin", password="admin123")
-    register_user("user1", "user1@example.com", role="regular", password="user1234")
+def test_regular_user_cannot_create_room():
+    token = make_token("user1", "regular")
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "name": "Room A",
+        "capacity": 10,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res = client.post("/rooms", json=payload, headers=headers)
+    assert res.status_code == 403
 
-    token = login_and_get_token("admin1", "admin123")
+
+def test_admin_can_create_room():
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "name": "Conf A",
+        "capacity": 10,
+        "equipment": "projector,whiteboard",
+        "location": "Building A - Floor 1",
+    }
+    res = client.post("/rooms", json=payload, headers=headers)
+    assert res.status_code == 201
+    body = res.json()
+    assert body["name"] == "Conf A"
+    assert body["capacity"] == 10
+    assert body["is_active"] is True
+    assert body["is_out_of_service"] is False
+
+
+def test_list_rooms_is_public_and_excludes_out_of_service():
+    # create two rooms: one normal, one out_of_service
+    token = make_token("admin1", "admin")
     headers = {"Authorization": f"Bearer {token}"}
 
-    res = client.get("/users", headers=headers)
+    r1 = {
+        "name": "Room Active",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    r2 = {
+        "name": "Room OOS",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+
+    res1 = client.post("/rooms", json=r1, headers=headers)
+    assert res1.status_code == 201
+
+    res2 = client.post("/rooms", json=r2, headers=headers)
+    assert res2.status_code == 201
+    room_oos_id = res2.json()["id"]
+
+    # mark second room out_of_service via update
+    update_payload = {"is_out_of_service": True}
+    res_update = client.put(f"/rooms/{room_oos_id}", json=update_payload, headers=headers)
+    assert res_update.status_code == 200
+    assert res_update.json()["is_out_of_service"] is True
+
+    # list rooms WITHOUT auth (public)
+    res_list = client.get("/rooms")
+    assert res_list.status_code == 200
+    rooms = res_list.json()
+    names = {r["name"] for r in rooms}
+
+    assert "Room Active" in names
+    assert "Room OOS" not in names  # excluded because out_of_service
+
+
+def test_admin_can_delete_room_soft():
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = {
+        "name": "Temp Room",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building X",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    # delete (soft)
+    res_delete = client.delete(f"/rooms/{room_id}", headers=headers)
+    assert res_delete.status_code == 204
+
+    # no longer retrievable
+    res_get = client.get(f"/rooms/{room_id}")
+    assert res_get.status_code == 404
+
+    # and not listed in /rooms
+    res_list = client.get("/rooms")
+    assert res_list.status_code == 200
+    rooms = res_list.json()
+    ids = {r["id"] for r in rooms}
+    assert room_id not in ids
+
+
+def test_room_filters_by_capacity_location_and_equipment():
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # small room, wrong equipment/location
+    r1 = {
+        "name": "Small Room",
+        "capacity": 4,
+        "equipment": "whiteboard",
+        "location": "Building B",
+    }
+    # big room, matching filters
+    r2 = {
+        "name": "Big Conf",
+        "capacity": 20,
+        "equipment": "projector,video",
+        "location": "Building A - Floor 1",
+    }
+
+    res1 = client.post("/rooms", json=r1, headers=headers)
+    assert res1.status_code == 201
+    res2 = client.post("/rooms", json=r2, headers=headers)
+    assert res2.status_code == 201
+
+    # filter: min_capacity=10, location contains "Building A", equipment contains "projector"
+    res = client.get(
+        "/rooms",
+        params={
+            "min_capacity": 10,
+            "location": "Building A",
+            "equipment_contains": "projector",
+        },
+    )
     assert res.status_code == 200
-    body = res.json()
-    usernames = {u["username"] for u in body}
-    assert "admin1" in usernames
-    assert "user1" in usernames
+    rooms = res.json()
+    names = {r["name"] for r in rooms}
+    assert "Big Conf" in names
+    assert "Small Room" not in names
