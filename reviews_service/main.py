@@ -19,6 +19,7 @@ def root():
 
 
 admin_or_moderator = require_roles("admin", "moderator")
+admin_mod_or_auditor = require_roles("admin", "moderator", "auditor")
 
 
 def get_review_or_404(db: Session, review_id: int) -> models.Review:
@@ -44,6 +45,12 @@ def create_review(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    # ❗ no writes for auditor / service_account
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot create reviews",
+        )
     # Optional: prevent duplicate review per user/room
     existing = (
         db.query(models.Review)
@@ -104,7 +111,7 @@ def list_all_reviews(
     only_flagged: bool = False,
     include_hidden: bool = True,
     db: Session = Depends(get_db),
-    _: Dict = Depends(admin_or_moderator),
+    _: Dict = Depends(admin_mod_or_auditor),
 ):
     """
     Admin/moderator view.
@@ -142,6 +149,12 @@ def update_review(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    # ❗ no writes for auditor / service_account
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot modify reviews",
+        )
     review = get_review_or_404(db, review_id)
 
     is_admin_or_mod = claims["role"] in ("admin", "moderator")
@@ -173,6 +186,13 @@ def delete_review(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    # ❗ no writes for auditor / service_account
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot delete reviews",
+        )
+
     review = get_review_or_404(db, review_id)
 
     is_admin_or_mod = claims["role"] in ("admin", "moderator")
@@ -201,6 +221,12 @@ def flag_review(
     """
     Any authenticated user can flag a review.
     """
+    # ❗ no writes for auditor / service_account
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot flag reviews",
+        )
     _ = claims  # ensure dependency runs
     review = get_review_or_404(db, review_id)
 
@@ -239,6 +265,22 @@ def unhide_review(
     """
     review = get_review_or_404(db, review_id)
     review.is_hidden = False
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+    return review
+
+@app.post("/reviews/{review_id}/unflag", response_model=schemas.ReviewRead)
+def unflag_review(
+    review_id: int,
+    db: Session = Depends(get_db),
+    _: Dict = Depends(admin_or_moderator),
+):
+    """
+    Admin/moderator: clear the flag on a review.
+    """
+    review = get_review_or_404(db, review_id)
+    review.is_flagged = False
     db.add(review)
     db.commit()
     db.refresh(review)

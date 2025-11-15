@@ -29,10 +29,14 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
-    
+
 
 class UserRoleUpdate(BaseModel):
     role: UserRole
+
+
+class PasswordReset(BaseModel):
+    new_password: str
 
 
 # ---------- Output schemas ----------
