@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -7,9 +8,17 @@ from . import models, schemas
 from .auth import require_roles
 from .database import Base, engine, get_db
 
+import os
+import httpx
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Rooms Service", version="1.0.0")
+
+BOOKINGS_SERVICE_URL = os.getenv(
+    "BOOKINGS_SERVICE_URL",
+    "http://bookings_service:8002",  # Docker internal URL
+)
 
 
 @app.get("/")
@@ -106,8 +115,19 @@ def update_room(
     if not room or not room.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
 
-    if update_data.name is not None:
+    if update_data.name is not None and update_data.name != room.name:
+        existing = (
+            db.query(models.Room)
+            .filter(models.Room.name == update_data.name)
+            .first()
+        )
+        if existing and existing.id != room.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Room with this name already exists",
+            )
         room.name = update_data.name
+
     if update_data.capacity is not None:
         room.capacity = update_data.capacity
     if update_data.equipment is not None:
@@ -144,20 +164,66 @@ def delete_room(
 
 
 @app.get("/rooms/{room_id}/status")
-def room_status(room_id: int, db: Session = Depends(get_db)):
+def room_status(
+    room_id: int,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+):
     """
-    Room status: 'available' or 'out_of_service' for now.
+    Room status:
 
-    Later, when Bookings is implemented, we'll also check
-    if the room is booked at a given time.
+    - If room is inactive or not found -> 404
+    - If room is out_of_service -> "out_of_service"
+    - If no start_time/end_time -> structural status only: "available"
+    - If time range provided:
+        - Calls Bookings service /bookings/availability
+        - Returns "available" or "booked" based on that
     """
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
     if not room or not room.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found",
+        )
 
     if room.is_out_of_service:
-        status_str = "out_of_service"
-    else:
-        status_str = "available"  # later also consider bookings
+        return {"room_id": room.id, "status": "out_of_service"}
+
+    # No time range -> just structural availability
+    if start_time is None or end_time is None:
+        return {"room_id": room.id, "status": "available"}
+
+    if end_time <= start_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_time must be after start_time",
+        )
+
+    # Ask Bookings service about time-based availability
+    try:
+        resp = httpx.get(
+            f"{BOOKINGS_SERVICE_URL}/bookings/availability",
+            params={
+                "room_id": room.id,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+            },
+            timeout=5.0,
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to contact bookings service for availability",
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Bookings service returned an error when checking availability",
+        )
+
+    data = resp.json()
+    status_str = "available" if data.get("available") else "booked"
 
     return {"room_id": room.id, "status": status_str}

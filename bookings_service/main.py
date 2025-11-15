@@ -19,7 +19,7 @@ def root():
     return {"service": "bookings", "status": "running"}
 
 
-admin_or_facility = require_roles("admin", "facility_manager")
+admin_facility_or_auditor = require_roles("admin", "facility_manager", "auditor")
 
 
 def ensure_time_valid(start_time: datetime, end_time: datetime):
@@ -93,6 +93,13 @@ def create_booking(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+        # ❗ Auditor and service accounts are read-only / system-only
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot create bookings",
+        )
+
     ensure_time_valid(booking_in.start_time, booking_in.end_time)
 
     if has_conflict(
@@ -148,7 +155,7 @@ def list_all_bookings(
     room_id: Optional[int] = Query(default=None, ge=1),
     user_id: Optional[int] = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    _: Dict = Depends(admin_or_facility),
+    _: Dict = Depends(admin_facility_or_auditor),
 ):
     """
     Admin/facility_manager: view all bookings.
@@ -178,6 +185,11 @@ def update_booking(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot modify bookings",
+        )
     booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(
@@ -238,6 +250,12 @@ def cancel_booking(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    # ❗ block read-only / service accounts
+    if claims["role"] in ("auditor", "service_account"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot cancel bookings",
+        )
     booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(

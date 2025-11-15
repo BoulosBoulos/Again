@@ -246,3 +246,103 @@ def test_check_availability_endpoint():
     assert res_free.status_code == 200
     free_info = res_free.json()
     assert free_info["available"] is True
+
+def test_auditor_cannot_create_or_modify_bookings():
+    token_aud = make_token(user_id=10, username="aud1", role="auditor")
+    headers_aud = {"Authorization": f"Bearer {token_aud}"}
+
+    now = datetime.now(timezone.utc)
+    body = {
+        "room_id": 1,
+        "start_time": (now + timedelta(hours=1)).isoformat(),
+        "end_time": (now + timedelta(hours=2)).isoformat(),
+    }
+
+    # cannot create
+    res_create = client.post("/bookings", json=body, headers=headers_aud)
+    assert res_create.status_code == 403
+
+    # prepare a booking with a regular user
+    token_user = make_token(user_id=1, username="user1", role="regular")
+    headers_user = {"Authorization": f"Bearer {token_user}"}
+    res = client.post("/bookings", json=body, headers=headers_user)
+    assert res.status_code == 201
+    booking_id = res.json()["id"]
+
+    # auditor cannot update
+    res_update = client.put(f"/bookings/{booking_id}", json={"room_id": 2}, headers=headers_aud)
+    assert res_update.status_code == 403
+
+    # auditor cannot cancel
+    res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_aud)
+    assert res_delete.status_code == 403
+
+def test_regular_user_cannot_modify_others_booking():
+    now = datetime.now(timezone.utc)
+
+    # user1 creates booking
+    token_user1 = make_token(user_id=1, username="user1", role="regular")
+    headers_user1 = {"Authorization": f"Bearer {token_user1}"}
+    body = {
+        "room_id": 1,
+        "start_time": (now + timedelta(hours=1)).isoformat(),
+        "end_time": (now + timedelta(hours=2)).isoformat(),
+    }
+    res_create = client.post("/bookings", json=body, headers=headers_user1)
+    assert res_create.status_code == 201
+    booking_id = res_create.json()["id"]
+
+    # user2 tries to update/cancel user1's booking
+    token_user2 = make_token(user_id=2, username="user2", role="regular")
+    headers_user2 = {"Authorization": f"Bearer {token_user2}"}
+
+    res_update = client.put(
+        f"/bookings/{booking_id}",
+        json={"room_id": 2},
+        headers=headers_user2,
+    )
+    assert res_update.status_code == 403
+
+    res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_user2)
+    assert res_delete.status_code == 403
+
+def test_admin_can_update_booking_status():
+    now = datetime.now(timezone.utc)
+
+    # user booking
+    token_user = make_token(user_id=1, username="user1", role="regular")
+    headers_user = {"Authorization": f"Bearer {token_user}"}
+    body = {
+        "room_id": 1,
+        "start_time": (now + timedelta(hours=1)).isoformat(),
+        "end_time": (now + timedelta(hours=2)).isoformat(),
+    }
+    res_create = client.post("/bookings", json=body, headers=headers_user)
+    assert res_create.status_code == 201
+    booking_id = res_create.json()["id"]
+
+    # admin updates status to cancelled without delete
+    token_admin = make_token(user_id=999, username="admin1", role="admin")
+    headers_admin = {"Authorization": f"Bearer {token_admin}"}
+
+    res_update = client.put(
+        f"/bookings/{booking_id}",
+        json={"status": "cancelled"},
+        headers=headers_admin,
+    )
+    assert res_update.status_code == 200
+    assert res_update.json()["status"] == "cancelled"
+
+def test_create_booking_with_invalid_time_fails():
+    token = make_token(user_id=1, username="user1", role="regular")
+    headers = {"Authorization": f"Bearer {token}"}
+    now = datetime.now(timezone.utc)
+
+    body = {
+        "room_id": 1,
+        "start_time": (now + timedelta(hours=2)).isoformat(),
+        "end_time": (now + timedelta(hours=1)).isoformat(),  # end < start
+    }
+    res = client.post("/bookings", json=body, headers=headers)
+    assert res.status_code == 400
+    assert "end_time must be after start_time" in res.json()["detail"]
