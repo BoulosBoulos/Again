@@ -14,6 +14,17 @@ Base = declarative_base()
 
 
 def get_db():
+    """
+    Yield a SQLAlchemy database session for the Rooms service.
+
+    This function is used as a FastAPI dependency to provide a scoped
+    session per request and ensure the session is closed afterwards.
+
+    Yields
+    ------
+    Session
+        Active SQLAlchemy session bound to the Rooms database engine.
+    """
     db = SessionLocal()
     try:
         yield db

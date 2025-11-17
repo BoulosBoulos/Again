@@ -23,6 +23,14 @@ BOOKINGS_SERVICE_URL = os.getenv(
 
 @app.get("/")
 def root():
+    """
+    Health-check endpoint for the Rooms service.
+
+    Returns
+    -------
+    dict
+        A small JSON payload indicating that the service is running.
+    """
     return {"service": "rooms", "status": "running"}
 
 
@@ -38,6 +46,35 @@ def create_room(
     db: Session = Depends(get_db),
     _: dict = Depends(admin_or_facility),
 ):
+    """
+    Create a new meeting room.
+
+    Access
+    ------
+    - Allowed roles: admin, facility_manager.
+
+    Behavior
+    --------
+    - Ensures that the room name is unique.
+    - Stores capacity, equipment list, and location.
+
+    Parameters
+    ----------
+    room_in : RoomCreate
+        New room details.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    RoomRead
+        The created room.
+
+    Raises
+    ------
+    HTTPException
+        If a room with the same name already exists.
+    """
     # ensure unique name
     existing = db.query(models.Room).filter(models.Room.name == room_in.name).first()
     if existing:
@@ -69,12 +106,31 @@ def list_rooms(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieve available rooms.
+    Retrieve available rooms with optional filters.
 
-    - Filter by min_capacity
-    - Filter by location substring
-    - Filter by equipment substring (e.g. 'projector')
-    - Excludes rooms marked out_of_service
+    Behavior
+    --------
+    - Only returns rooms that are active and not out of service.
+    - Supports filtering by:
+      * minimum capacity
+      * location substring
+      * equipment substring (e.g. 'projector').
+
+    Parameters
+    ----------
+    min_capacity : Optional[int]
+        Minimum room capacity.
+    location : Optional[str]
+        Substring to match in the location field.
+    equipment_contains : Optional[str]
+        Substring to match in the equipment field.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    List[RoomRead]
+        List of rooms matching the filters.
     """
     query = db.query(models.Room).filter(models.Room.is_active.is_(True))
 
@@ -95,6 +151,26 @@ def list_rooms(
 
 @app.get("/rooms/{room_id}", response_model=schemas.RoomRead)
 def get_room(room_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve a single room by its ID.
+
+    Parameters
+    ----------
+    room_id : int
+        Identifier of the room.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    RoomRead
+        The requested room.
+
+    Raises
+    ------
+    HTTPException
+        If the room does not exist or is inactive.
+    """
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
     if not room or not room.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
@@ -111,6 +187,37 @@ def update_room(
     db: Session = Depends(get_db),
     _: dict = Depends(admin_or_facility),
 ):
+    """
+    Update an existing room.
+
+    Access
+    ------
+    - Allowed roles: admin, facility_manager.
+
+    Behavior
+    --------
+    - Allows updating name, capacity, equipment, location, and out-of-service flag.
+    - Ensures that the new name (if changed) remains unique.
+
+    Parameters
+    ----------
+    room_id : int
+        ID of the room to update.
+    update_data : RoomUpdate
+        Fields to update.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    RoomRead
+        The updated room.
+
+    Raises
+    ------
+    HTTPException
+        If the room is not found or the new name conflicts with another room.
+    """
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
     if not room or not room.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
@@ -149,6 +256,33 @@ def delete_room(
     db: Session = Depends(get_db),
     _: dict = Depends(admin_or_facility),
 ):
+    """
+    Soft-delete a room by marking it inactive.
+
+    Access
+    ------
+    - Allowed roles: admin, facility_manager.
+
+    Behavior
+    --------
+    - Sets is_active = False so the room is excluded from listings.
+
+    Parameters
+    ----------
+    room_id : int
+        ID of the room to delete.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the room is not found or already inactive.
+    """
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
     if not room or not room.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
@@ -171,14 +305,42 @@ def room_status(
     db: Session = Depends(get_db),
 ):
     """
-    Room status:
+    Report the status of a room, optionally for a time range.
 
-    - If room is inactive or not found -> 404
-    - If room is out_of_service -> "out_of_service"
-    - If no start_time/end_time -> structural status only: "available"
-    - If time range provided:
-        - Calls Bookings service /bookings/availability
-        - Returns "available" or "booked" based on that
+    Behavior
+    --------
+    - If the room is missing or inactive -> HTTP 404.
+    - If the room is marked out_of_service -> status = "out_of_service".
+    - If no time range is provided:
+        * status = "available" (structural availability only).
+    - If start_time and end_time are provided:
+        * Validates that end_time > start_time.
+        * Calls Bookings service `/bookings/availability`.
+        * Returns:
+            - "available" if the room is free in that interval.
+            - "booked" if the room is occupied in that interval.
+
+    Parameters
+    ----------
+    room_id : int
+        ID of the room to check.
+    start_time : Optional[datetime]
+        Start of the time window (ISO 8601).
+    end_time : Optional[datetime]
+        End of the time window (ISO 8601).
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    dict
+        JSON object with keys {'room_id', 'status'}.
+
+    Raises
+    ------
+    HTTPException
+        If the room does not exist, the time range is invalid,
+        or the Bookings service cannot be reached.
     """
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
     if not room or not room.is_active:

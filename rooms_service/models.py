@@ -6,6 +6,28 @@ from .database import Base
 
 
 class Room(Base):
+    """
+    SQLAlchemy model representing a meeting room.
+
+    Attributes
+    ----------
+    id : int
+        Primary key.
+    name : str
+        Human-readable, unique room name (e.g. 'Conference Room A').
+    capacity : int
+        Maximum number of people the room can hold.
+    equipment : str
+        Optional comma-separated list of equipment (e.g. 'projector,whiteboard').
+    location : str
+        Physical location description (building, floor, etc.).
+    is_active : bool
+        Soft-delete flag; inactive rooms are hidden from normal queries.
+    is_out_of_service : bool
+        Whether the room is temporarily unavailable for booking.
+    created_at : datetime
+        Timestamp recording when the room was created.
+    """
     __tablename__ = "rooms"
 
     id = Column(Integer, primary_key=True, index=True)

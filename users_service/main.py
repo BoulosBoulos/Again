@@ -52,6 +52,25 @@ def root():
 # ---------- Password Strength ----------
 
 def validate_password_strength(password: str):
+
+    """
+    Validate password complexity rules.
+
+    A valid password must:
+    - Be at least 8 characters long
+    - Contain at least one letter
+    - Contain at least one digit
+
+    Parameters
+    ----------
+    password : str
+        The raw password submitted by the user.
+
+    Raises
+    ------
+    HTTPException
+        If the password does not meet the strength requirements.
+    """
     if len(password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -76,6 +95,32 @@ def validate_password_strength(password: str):
     status_code=status.HTTP_201_CREATED,
 )
 def register_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+    """
+    Register a new user.
+
+    Behavior:
+    - First account created becomes ADMIN.
+    - All subsequent public registrations become REGULAR users.
+    - Username and email must be unique.
+    - Password strength is validated before hashing.
+
+    Parameters
+    ----------
+    user_in : UserCreate
+        Incoming registration data.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    UserRead
+        The newly created user.
+
+    Raises
+    ------
+    HTTPException
+        If username/email already exist or password is weak.
+    """
     # Check unique username/email
     existing = (
         db.query(models.User)
@@ -122,6 +167,27 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    """
+    Authenticate a user and return a JWT access token.
+
+    Parameters
+    ----------
+    form_data : OAuth2PasswordRequestForm
+        Login credentials (username + password).
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    Token
+        Access token with role and user_id embedded.
+
+    Raises
+    ------
+    HTTPException
+        If authentication fails.
+    """
+
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -148,6 +214,19 @@ def login(
 
 @app.get("/users/me", response_model=schemas.UserRead)
 def get_my_profile(current_user: models.User = Depends(get_current_user)):
+    """
+    Retrieve the authenticated user's own profile.
+
+    Parameters
+    ----------
+    current_user : User
+        Extracted from JWT token.
+
+    Returns
+    -------
+    UserRead
+        The profile of the authenticated user.
+    """
     return current_user
 
 
@@ -157,6 +236,35 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """
+    Update the authenticated user's profile.
+
+    Editable fields:
+    - name
+    - email (must be unique)
+
+    Restrictions:
+    - AUDITOR and SERVICE_ACCOUNT roles cannot update profiles.
+
+    Parameters
+    ----------
+    update_data : UserUpdate
+        Fields to update.
+    db : Session
+        Database session.
+    current_user : User
+        The authenticated user.
+
+    Returns
+    -------
+    UserRead
+        Updated user profile.
+
+    Raises
+    ------
+    HTTPException
+        If email already exists or role is read-only.
+    """
     # block read-only / service accounts
     if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
@@ -192,6 +300,29 @@ def delete_my_account(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """
+    Delete the authenticated user's own account.
+
+    Restrictions
+    ----------
+    - AUDITOR and SERVICE_ACCOUNT roles cannot delete accounts.
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+    current_user : User
+        The user executing the delete operation.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If user role is read-only.
+    """
     # ❗ block read-only / service accounts
     if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
@@ -216,6 +347,24 @@ def list_users(
     db: Session = Depends(get_db),
     _: models.User = Depends(admin_or_auditor),
 ):
+    """
+    Admin/Auditor: Retrieve all users.
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    List[UserRead]
+        All registered users.
+
+    Raises
+    ------
+    HTTPException
+        If caller does not have ADMIN or AUDITOR role.
+    """
     users = db.query(models.User).all()
     return users
 
@@ -226,6 +375,26 @@ def get_user_by_username_admin(
     db: Session = Depends(get_db),
     _: models.User = Depends(admin_or_auditor),
 ):
+    """
+    Admin/Auditor: Retrieve a specific user by username.
+
+    Parameters
+    ----------
+    username : str
+        Username to search for.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    UserRead
+        Matching user.
+
+    Raises
+    ------
+    HTTPException
+        If user does not exist.
+    """
     user = (
         db.query(models.User)
         .filter(models.User.username == username)
@@ -244,6 +413,25 @@ def delete_user_admin(
     db: Session = Depends(get_db),
     _: models.User = Depends(admin_only),
 ):
+    """
+    Admin only: Delete any user by ID.
+
+    Parameters
+    ----------
+    user_id : int
+        ID of the user to delete.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If user is not found.
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(
@@ -261,6 +449,28 @@ def change_user_role(
     db: Session = Depends(get_db),
     _: models.User = Depends(admin_only),
 ):
+    """
+    Admin only: Update a user's role.
+
+    Parameters
+    ----------
+    user_id : int
+        User to modify.
+    role_update : UserRoleUpdate
+        New role to assign.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    UserRead
+        Updated user with new role.
+
+    Raises
+    ------
+    HTTPException
+        If user does not exist.
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(
@@ -281,7 +491,27 @@ def reset_user_password(
     _: models.User = Depends(admin_only),
 ):
     """
-    Admin: reset a user's password.
+    Admin: Reset another user's password.
+
+    Validates password strength before hashing.
+
+    Parameters
+    ----------
+    user_id : int
+        ID of the user whose password is being reset.
+    body : PasswordReset
+        Contains the new password.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If user does not exist or password is weak.
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -305,12 +535,34 @@ def get_user_booking_history(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    View booking history for a user.
+    Retrieve a user's full booking history via the Bookings service.
 
-    - Regular user: can only see their own history.
-    - Admin/Auditor: can see any user's history.
+    Access Rules
+    ------------
+    - Admin & Auditor: may view any user's history.
+    - Regular user: may view only their own history.
 
-    This endpoint delegates to the Bookings service.
+    Implementation Notes
+    --------------------
+    - Generates a service-account JWT.
+    - Calls Bookings service: GET /bookings?user_id=<id>
+
+    Parameters
+    ----------
+    user_id : int
+        User whose history is requested.
+    current_user : User
+        Requesting user.
+
+    Returns
+    -------
+    dict
+        { "user_id": int, "bookings": list }
+
+    Raises
+    ------
+    HTTPException
+        If unauthorized or Bookings service errors.
     """
     # RBAC: only self OR admin/auditor
     if current_user.role not in (UserRole.ADMIN, UserRole.AUDITOR) and current_user.id != user_id:

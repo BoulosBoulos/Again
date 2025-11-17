@@ -17,6 +17,17 @@ Base = declarative_base()
 
 
 def get_db():
+    """
+    Yield a SQLAlchemy database session.
+
+    This is used as a FastAPI dependency to provide a scoped
+    session per request and ensure it is properly closed.
+
+    Yields
+    ------
+    Session
+        Active SQLAlchemy session bound to the configured engine.
+    """
     db = SessionLocal()
     try:
         yield db

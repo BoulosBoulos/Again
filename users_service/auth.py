@@ -22,16 +22,59 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a plaintext password against a bcrypt hash.
+
+    Parameters
+    ----------
+    plain_password : str
+        Raw password provided by the user.
+    hashed_password : str
+        Previously stored bcrypt hash.
+
+    Returns
+    -------
+    bool
+        True if the password matches, False otherwise.
+    """
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
+    """
+    Hash a plaintext password using bcrypt.
+
+    Parameters
+    ----------
+    password : str
+        The raw password to hash.
+
+    Returns
+    -------
+    str
+        Bcrypt hash suitable for storage.
+    """
     return pwd_context.hash(password)
 
 
 # ---------- DB helpers ----------
 
 def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
+    """
+    Retrieve a user by username.
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+    username : str
+        Username to look up.
+
+    Returns
+    -------
+    Optional[User]
+        Matching user instance, or None if not found.
+    """
     return db.query(models.User).filter(models.User.username == username).first()
 
 
@@ -39,7 +82,21 @@ def authenticate_user(
     db: Session, username: str, password: str
 ) -> Optional[models.User]:
     """
-    Return the user if username+password are correct, otherwise None.
+    Authenticate a user given username and password.
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+    username : str
+        Username provided by the client.
+    password : str
+        Plaintext password provided by the client.
+
+    Returns
+    -------
+    Optional[User]
+        The authenticated user if credentials are valid, otherwise None.
     """
     user = get_user_by_username(db, username)
     if not user:
@@ -52,6 +109,21 @@ def authenticate_user(
 # ---------- JWT helpers ----------
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create a signed JWT access token.
+
+    Parameters
+    ----------
+    data : dict
+        Claims to embed in the token (e.g. 'sub', 'role', 'user_id').
+    expires_delta : Optional[timedelta]
+        Optional custom expiration interval.
+
+    Returns
+    -------
+    str
+        Encoded JWT string.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -66,8 +138,31 @@ async def get_current_user(
     db: Session = Depends(get_db),
 ) -> models.User:
     """
-    Decode token, fetch user from DB, and return it.
-    Raises 401 if anything is wrong.
+    Resolve the current user from a JWT bearer token.
+
+    Steps
+    -----
+    - Decode the JWT using the shared SECRET_KEY.
+    - Extract the username and optional role.
+    - Load the user from the database.
+    - Optionally verify that the token role matches the database role.
+
+    Parameters
+    ----------
+    token : str
+        Bearer token from the Authorization header.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    User
+        The authenticated user.
+
+    Raises
+    ------
+    HTTPException
+        If the token is invalid, expired, or the user does not exist.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -105,7 +200,18 @@ async def get_current_user(
 
 def require_roles(allowed_roles: List[models.UserRole]):
     """
-    Returns a dependency that ensures the current user has one of the allowed roles.
+    Build a dependency that enforces role-based access control.
+
+    Parameters
+    ----------
+    allowed_roles : List[UserRole]
+        Roles that are allowed to access the protected endpoint.
+
+    Returns
+    -------
+    Callable
+        A FastAPI dependency that verifies the current user's role
+        and raises HTTP 403 if not permitted.
     """
 
     async def dependency(current_user: models.User = Depends(get_current_user)):
