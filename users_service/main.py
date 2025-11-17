@@ -304,7 +304,7 @@ def delete_my_account(
     Delete the authenticated user's own account.
 
     Restrictions
-    ----------
+    -----------
     - AUDITOR and SERVICE_ACCOUNT roles cannot delete accounts.
 
     Parameters

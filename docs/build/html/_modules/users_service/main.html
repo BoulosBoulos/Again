@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>users_service.main &#8212; Smart Meeting Room &amp; Management System 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for users_service.main</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">,</span> <span class="n">timezone</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">Depends</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.security</span><span class="w"> </span><span class="kn">import</span> <span class="n">OAuth2PasswordRequestForm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span><span class="p">,</span> <span class="n">schemas</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.auth</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ACCESS_TOKEN_EXPIRE_MINUTES</span><span class="p">,</span>
+    <span class="n">authenticate_user</span><span class="p">,</span>
+    <span class="n">create_access_token</span><span class="p">,</span>
+    <span class="n">get_current_user</span><span class="p">,</span>
+    <span class="n">get_password_hash</span><span class="p">,</span>
+    <span class="n">require_roles</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.database</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span><span class="p">,</span> <span class="n">engine</span><span class="p">,</span> <span class="n">get_db</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserRole</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span><span class="o">,</span><span class="w"> </span><span class="nn">os</span><span class="o">,</span><span class="w"> </span><span class="nn">httpx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jose</span><span class="w"> </span><span class="kn">import</span> <span class="n">jwt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">SECRET_KEY</span><span class="p">,</span> <span class="n">ALGORITHM</span>
+
+<span class="c1"># Create tables on startup</span>
+<span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Users Service&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
+
+<span class="n">BOOKINGS_SERVICE_URL</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
+    <span class="s2">&quot;BOOKINGS_SERVICE_URL&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;http://bookings_service:8002&quot;</span><span class="p">,</span>  <span class="c1"># Docker internal hostname:port</span>
+<span class="p">)</span>
+
+<span class="n">SERVICE_ACCOUNT_USERNAME</span> <span class="o">=</span> <span class="s2">&quot;users_service&quot;</span>
+<span class="n">SERVICE_ACCOUNT_USER_ID</span> <span class="o">=</span> <span class="mi">0</span>        <span class="c1"># &quot;fake&quot; ID for the service account</span>
+<span class="n">SERVICE_ACCOUNT_ROLE</span> <span class="o">=</span> <span class="s2">&quot;auditor&quot;</span>   <span class="c1"># allowed to call GET /bookings</span>
+
+<div class="viewcode-block" id="make_service_account_token">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.make_service_account_token">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_service_account_token</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;sub&quot;</span><span class="p">:</span> <span class="n">SERVICE_ACCOUNT_USERNAME</span><span class="p">,</span>
+        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">SERVICE_ACCOUNT_ROLE</span><span class="p">,</span>
+        <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">SERVICE_ACCOUNT_USER_ID</span><span class="p">,</span>
+        <span class="s2">&quot;exp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">jwt</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">SECRET_KEY</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">ALGORITHM</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="root">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.root">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">root</span><span class="p">():</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;service&quot;</span><span class="p">:</span> <span class="s2">&quot;users&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;running&quot;</span><span class="p">}</span></div>
+
+
+
+<span class="c1"># ---------- Password Strength ----------</span>
+
+<div class="viewcode-block" id="validate_password_strength">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.validate_password_strength">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_password_strength</span><span class="p">(</span><span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate password complexity rules.</span>
+
+<span class="sd">    A valid password must:</span>
+<span class="sd">    - Be at least 8 characters long</span>
+<span class="sd">    - Contain at least one letter</span>
+<span class="sd">    - Contain at least one digit</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    password : str</span>
+<span class="sd">        The raw password submitted by the user.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If the password does not meet the strength requirements.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">password</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">8</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Password must be at least 8 characters long&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;[A-Za-z]&quot;</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Password must contain at least one letter&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\d&quot;</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Password must contain at least one digit&quot;</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    
+<span class="c1"># ---------- Registration ----------</span>
+
+<div class="viewcode-block" id="register_user">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.register_user">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+    <span class="s2">&quot;/users/register&quot;</span><span class="p">,</span>
+    <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">,</span>
+    <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_201_CREATED</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">register_user</span><span class="p">(</span><span class="n">user_in</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">UserCreate</span><span class="p">,</span> <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Register a new user.</span>
+
+<span class="sd">    Behavior:</span>
+<span class="sd">    - First account created becomes ADMIN.</span>
+<span class="sd">    - All subsequent public registrations become REGULAR users.</span>
+<span class="sd">    - Username and email must be unique.</span>
+<span class="sd">    - Password strength is validated before hashing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_in : UserCreate</span>
+<span class="sd">        Incoming registration data.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UserRead</span>
+<span class="sd">        The newly created user.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If username/email already exist or password is weak.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Check unique username/email</span>
+    <span class="n">existing</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">username</span> <span class="o">==</span> <span class="n">user_in</span><span class="o">.</span><span class="n">username</span><span class="p">)</span>
+            <span class="o">|</span> <span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">user_in</span><span class="o">.</span><span class="n">email</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">existing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Username or email already exists&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># --- Bootstrap admin + secure default roles ---</span>
+    <span class="n">user_count</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">user_count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># first ever account → admin</span>
+        <span class="n">assigned_role</span> <span class="o">=</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># all public registrations → regular</span>
+        <span class="n">assigned_role</span> <span class="o">=</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">REGULAR</span>
+
+    <span class="c1"># enforce password strength</span>
+    <span class="n">validate_password_strength</span><span class="p">(</span><span class="n">user_in</span><span class="o">.</span><span class="n">password</span><span class="p">)</span>
+    <span class="n">hashed_pw</span> <span class="o">=</span> <span class="n">get_password_hash</span><span class="p">(</span><span class="n">user_in</span><span class="o">.</span><span class="n">password</span><span class="p">)</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">user_in</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">username</span><span class="o">=</span><span class="n">user_in</span><span class="o">.</span><span class="n">username</span><span class="p">,</span>
+        <span class="n">email</span><span class="o">=</span><span class="n">user_in</span><span class="o">.</span><span class="n">email</span><span class="p">,</span>
+        <span class="n">hashed_password</span><span class="o">=</span><span class="n">hashed_pw</span><span class="p">,</span>
+        <span class="n">role</span><span class="o">=</span><span class="n">assigned_role</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">user</span></div>
+
+
+<span class="c1"># ---------- Login (token) ----------</span>
+
+<div class="viewcode-block" id="login">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.login">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/users/login&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">Token</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">login</span><span class="p">(</span>
+    <span class="n">form_data</span><span class="p">:</span> <span class="n">OAuth2PasswordRequestForm</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(),</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Authenticate a user and return a JWT access token.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    form_data : OAuth2PasswordRequestForm</span>
+<span class="sd">        Login credentials (username + password).</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Token</span>
+<span class="sd">        Access token with role and user_id embedded.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If authentication fails.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">user</span> <span class="o">=</span> <span class="n">authenticate_user</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">form_data</span><span class="o">.</span><span class="n">username</span><span class="p">,</span> <span class="n">form_data</span><span class="o">.</span><span class="n">password</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_401_UNAUTHORIZED</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Incorrect username or password&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">access_token_expires</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="n">ACCESS_TOKEN_EXPIRE_MINUTES</span><span class="p">)</span>
+
+    <span class="c1"># Store role as string in the token (user.role.value)</span>
+    <span class="n">access_token</span> <span class="o">=</span> <span class="n">create_access_token</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;sub&quot;</span><span class="p">:</span> <span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="p">,</span>
+            <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">user</span><span class="o">.</span><span class="n">role</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> 
+        <span class="p">},</span>
+        <span class="n">expires_delta</span><span class="o">=</span><span class="n">access_token_expires</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;access_token&quot;</span><span class="p">:</span> <span class="n">access_token</span><span class="p">,</span> <span class="s2">&quot;token_type&quot;</span><span class="p">:</span> <span class="s2">&quot;bearer&quot;</span><span class="p">}</span></div>
+
+
+
+<span class="c1"># ---------- Current user profile (Regular user) ----------</span>
+
+<div class="viewcode-block" id="get_my_profile">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.get_my_profile">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/users/me&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_my_profile</span><span class="p">(</span><span class="n">current_user</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user</span><span class="p">)):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieve the authenticated user&#39;s own profile.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    current_user : User</span>
+<span class="sd">        Extracted from JWT token.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UserRead</span>
+<span class="sd">        The profile of the authenticated user.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">current_user</span></div>
+
+
+
+<div class="viewcode-block" id="update_my_profile">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.update_my_profile">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;/users/me&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">update_my_profile</span><span class="p">(</span>
+    <span class="n">update_data</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">UserUpdate</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">current_user</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Update the authenticated user&#39;s profile.</span>
+
+<span class="sd">    Editable fields:</span>
+<span class="sd">    - name</span>
+<span class="sd">    - email (must be unique)</span>
+
+<span class="sd">    Restrictions:</span>
+<span class="sd">    - AUDITOR and SERVICE_ACCOUNT roles cannot update profiles.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    update_data : UserUpdate</span>
+<span class="sd">        Fields to update.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    current_user : User</span>
+<span class="sd">        The authenticated user.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UserRead</span>
+<span class="sd">        Updated user profile.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If email already exists or role is read-only.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># block read-only / service accounts</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">SERVICE_ACCOUNT</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Read-only users cannot modify profiles&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">current_user</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">name</span>
+
+    <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span> <span class="o">!=</span> <span class="n">current_user</span><span class="o">.</span><span class="n">email</span><span class="p">:</span>
+        <span class="c1"># check if email is already used by another user</span>
+        <span class="n">email_owner</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">first</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">email_owner</span> <span class="ow">and</span> <span class="n">email_owner</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Email already in use&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">current_user</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span>
+
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">current_user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">current_user</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">current_user</span></div>
+
+
+
+<div class="viewcode-block" id="delete_my_account">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.delete_my_account">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;/users/me&quot;</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_204_NO_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">delete_my_account</span><span class="p">(</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">current_user</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Delete the authenticated user&#39;s own account.</span>
+
+<span class="sd">    Restrictions</span>
+<span class="sd">    -----------</span>
+<span class="sd">    - AUDITOR and SERVICE_ACCOUNT roles cannot delete accounts.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    current_user : User</span>
+<span class="sd">        The user executing the delete operation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If user role is read-only.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># ❗ block read-only / service accounts</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">SERVICE_ACCOUNT</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Read-only users cannot delete accounts&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">db</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">current_user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="k">return</span></div>
+
+
+<span class="c1"># ---------- helpers ----------</span>
+
+<span class="n">admin_only</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">([</span><span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">])</span>
+<span class="n">admin_or_auditor</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">([</span><span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">])</span>
+
+
+<span class="c1"># ---------- Admin: list users, get by username, delete ----------</span>
+
+<div class="viewcode-block" id="list_users">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.list_users">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/users&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">List</span><span class="p">[</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">list_users</span><span class="p">(</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_or_auditor</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin/Auditor: Retrieve all users.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    List[UserRead]</span>
+<span class="sd">        All registered users.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If caller does not have ADMIN or AUDITOR role.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">users</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">users</span></div>
+
+
+
+<div class="viewcode-block" id="get_user_by_username_admin">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.get_user_by_username_admin">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/users/</span><span class="si">{username}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_user_by_username_admin</span><span class="p">(</span>
+    <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_or_auditor</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin/Auditor: Retrieve a specific user by username.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    username : str</span>
+<span class="sd">        Username to search for.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UserRead</span>
+<span class="sd">        Matching user.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If user does not exist.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">username</span> <span class="o">==</span> <span class="n">username</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;User not found&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">user</span></div>
+
+
+
+<div class="viewcode-block" id="delete_user_admin">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.delete_user_admin">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;/users/</span><span class="si">{user_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_204_NO_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">delete_user_admin</span><span class="p">(</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_only</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin only: Delete any user by ID.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_id : int</span>
+<span class="sd">        ID of the user to delete.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If user is not found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;User not found&quot;</span>
+        <span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="k">return</span></div>
+
+
+
+<div class="viewcode-block" id="change_user_role">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.change_user_role">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;/users/</span><span class="si">{user_id}</span><span class="s2">/role&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">change_user_role</span><span class="p">(</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">role_update</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">UserRoleUpdate</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_only</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin only: Update a user&#39;s role.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_id : int</span>
+<span class="sd">        User to modify.</span>
+<span class="sd">    role_update : UserRoleUpdate</span>
+<span class="sd">        New role to assign.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UserRead</span>
+<span class="sd">        Updated user with new role.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If user does not exist.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;User not found&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">user</span><span class="o">.</span><span class="n">role</span> <span class="o">=</span> <span class="n">role_update</span><span class="o">.</span><span class="n">role</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">user</span></div>
+
+
+<div class="viewcode-block" id="reset_user_password">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.reset_user_password">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/users/</span><span class="si">{user_id}</span><span class="s2">/reset-password&quot;</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_204_NO_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">reset_user_password</span><span class="p">(</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">body</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">PasswordReset</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_only</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin: Reset another user&#39;s password.</span>
+
+<span class="sd">    Validates password strength before hashing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_id : int</span>
+<span class="sd">        ID of the user whose password is being reset.</span>
+<span class="sd">    body : PasswordReset</span>
+<span class="sd">        Contains the new password.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If user does not exist or password is weak.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;User not found&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">validate_password_strength</span><span class="p">(</span><span class="n">body</span><span class="o">.</span><span class="n">new_password</span><span class="p">)</span>
+    <span class="n">user</span><span class="o">.</span><span class="n">hashed_password</span> <span class="o">=</span> <span class="n">get_password_hash</span><span class="p">(</span><span class="n">body</span><span class="o">.</span><span class="n">new_password</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="k">return</span></div>
+
+
+
+<span class="c1"># ---------- Booking history (stub for now) ----------</span>
+
+<div class="viewcode-block" id="get_user_booking_history">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.get_user_booking_history">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/users/</span><span class="si">{user_id}</span><span class="s2">/booking-history&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_user_booking_history</span><span class="p">(</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">current_user</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieve a user&#39;s full booking history via the Bookings service.</span>
+
+<span class="sd">    Access Rules</span>
+<span class="sd">    ------------</span>
+<span class="sd">    - Admin &amp; Auditor: may view any user&#39;s history.</span>
+<span class="sd">    - Regular user: may view only their own history.</span>
+
+<span class="sd">    Implementation Notes</span>
+<span class="sd">    --------------------</span>
+<span class="sd">    - Generates a service-account JWT.</span>
+<span class="sd">    - Calls Bookings service: GET /bookings?user_id=&lt;id&gt;</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_id : int</span>
+<span class="sd">        User whose history is requested.</span>
+<span class="sd">    current_user : User</span>
+<span class="sd">        Requesting user.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        { &quot;user_id&quot;: int, &quot;bookings&quot;: list }</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If unauthorized or Bookings service errors.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># RBAC: only self OR admin/auditor</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">)</span> <span class="ow">and</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">user_id</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to view other users&#39; booking history&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">token</span> <span class="o">=</span> <span class="n">make_service_account_token</span><span class="p">()</span>
+    <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">BOOKINGS_SERVICE_URL</span><span class="si">}</span><span class="s2">/bookings&quot;</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">},</span>
+            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">RequestError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_502_BAD_GATEWAY</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Failed to contact bookings service&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_502_BAD_GATEWAY</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Bookings service returned an error&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">bookings</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span>
+        <span class="s2">&quot;bookings&quot;</span><span class="p">:</span> <span class="n">bookings</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">Smart Meeting Room & Management System</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../users_service.html">Users Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../rooms_service.html">Rooms Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../bookings_service.html">Bookings Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reviews_service.html">Reviews Service API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Ahmad Hlayhel & Boulos Boulos.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

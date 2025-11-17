@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bookings_service.main &#8212; Smart Meeting Room &amp; Management System 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for bookings_service.main</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">Depends</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Query</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span><span class="p">,</span> <span class="n">schemas</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_current_user_claims</span><span class="p">,</span> <span class="n">require_roles</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.database</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span><span class="p">,</span> <span class="n">engine</span><span class="p">,</span> <span class="n">get_db</span>
+
+<span class="c1"># Create tables</span>
+<span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Bookings Service&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="root">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.root">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">root</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Health-check endpoint for the Bookings service.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        A small JSON payload indicating that the service is running.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;service&quot;</span><span class="p">:</span> <span class="s2">&quot;bookings&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;running&quot;</span><span class="p">}</span></div>
+
+
+
+<span class="n">admin_facility_or_auditor</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;auditor&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ensure_time_valid">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.ensure_time_valid">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ensure_time_valid</span><span class="p">(</span><span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate that a booking time range is well-formed.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    start_time : datetime</span>
+<span class="sd">        Start of the requested booking.</span>
+<span class="sd">    end_time : datetime</span>
+<span class="sd">        End of the requested booking.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If end_time is not strictly after start_time.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">end_time</span> <span class="o">&lt;=</span> <span class="n">start_time</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;end_time must be after start_time&quot;</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="has_conflict">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.has_conflict">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">has_conflict</span><span class="p">(</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span><span class="p">,</span>
+    <span class="n">room_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+    <span class="n">ignore_booking_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if there is any overlapping booking on the same room.</span>
+
+<span class="sd">    Overlaps are detected for all bookings in the given room where:</span>
+<span class="sd">    - status != CANCELLED</span>
+<span class="sd">    - existing.end_time &gt; start_time</span>
+<span class="sd">    - existing.start_time &lt; end_time</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    room_id : int</span>
+<span class="sd">        Room identifier.</span>
+<span class="sd">    start_time : datetime</span>
+<span class="sd">        Proposed start time.</span>
+<span class="sd">    end_time : datetime</span>
+<span class="sd">        Proposed end time.</span>
+<span class="sd">    ignore_booking_id : Optional[int]</span>
+<span class="sd">        If provided, ignore this booking (useful when updating).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        True if there is at least one conflicting booking, False otherwise.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">room_id</span> <span class="o">==</span> <span class="n">room_id</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">status</span> <span class="o">!=</span> <span class="n">models</span><span class="o">.</span><span class="n">BookingStatus</span><span class="o">.</span><span class="n">CANCELLED</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">end_time</span> <span class="o">&gt;</span> <span class="n">start_time</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">start_time</span> <span class="o">&lt;</span> <span class="n">end_time</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">ignore_booking_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">ignore_booking_id</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">q</span><span class="o">.</span><span class="n">exists</span><span class="p">())</span><span class="o">.</span><span class="n">scalar</span><span class="p">()</span></div>
+
+
+
+<span class="c1"># ---------- Check room availability ----------</span>
+
+
+<div class="viewcode-block" id="check_availability">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.check_availability">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/bookings/availability&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">check_availability</span><span class="p">(</span>
+    <span class="n">room_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if a room is available during a given time range.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    room_id : int</span>
+<span class="sd">        Room to check.</span>
+<span class="sd">    start_time : datetime</span>
+<span class="sd">        Start of the desired interval (ISO 8601).</span>
+<span class="sd">    end_time : datetime</span>
+<span class="sd">        End of the desired interval (ISO 8601).</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        JSON object with:</span>
+<span class="sd">        - &#39;room_id&#39; : int</span>
+<span class="sd">        - &#39;available&#39; : bool</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If the time range is invalid.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ensure_time_valid</span><span class="p">(</span><span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">)</span>
+    <span class="n">busy</span> <span class="o">=</span> <span class="n">has_conflict</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">room_id</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;room_id&quot;</span><span class="p">:</span> <span class="n">room_id</span><span class="p">,</span>
+        <span class="s2">&quot;available&quot;</span><span class="p">:</span> <span class="ow">not</span> <span class="n">busy</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+
+<span class="c1"># ---------- Create booking (regular user) ----------</span>
+
+
+<div class="viewcode-block" id="create_booking">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.create_booking">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+    <span class="s2">&quot;/bookings&quot;</span><span class="p">,</span>
+    <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">BookingRead</span><span class="p">,</span>
+    <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_201_CREATED</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_booking</span><span class="p">(</span>
+    <span class="n">booking_in</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">BookingCreate</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">claims</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user_claims</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a new booking for the authenticated user.</span>
+
+<span class="sd">    Access</span>
+<span class="sd">    ------</span>
+<span class="sd">    - Denied for roles: auditor, service_account.</span>
+<span class="sd">    - Allowed for: regular, admin, facility_manager, moderator.</span>
+
+<span class="sd">    Behavior</span>
+<span class="sd">    --------</span>
+<span class="sd">    - Validates that the time range is correct.</span>
+<span class="sd">    - Rejects bookings that overlap with existing non-cancelled bookings.</span>
+<span class="sd">    - Uses the user_id from the JWT claims as the booking owner.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    booking_in : BookingCreate</span>
+<span class="sd">        Room and time information for the new booking.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    claims : Dict</span>
+<span class="sd">        Decoded JWT claims (user_id, role, etc.).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    BookingRead</span>
+<span class="sd">        The newly created booking.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If the user role is read-only, the time range is invalid,</span>
+<span class="sd">        or the room is already booked.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># ❗ Auditor and service accounts are read-only / system-only</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot create bookings&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">ensure_time_valid</span><span class="p">(</span><span class="n">booking_in</span><span class="o">.</span><span class="n">start_time</span><span class="p">,</span> <span class="n">booking_in</span><span class="o">.</span><span class="n">end_time</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">has_conflict</span><span class="p">(</span>
+        <span class="n">db</span><span class="p">,</span>
+        <span class="n">booking_in</span><span class="o">.</span><span class="n">room_id</span><span class="p">,</span>
+        <span class="n">booking_in</span><span class="o">.</span><span class="n">start_time</span><span class="p">,</span>
+        <span class="n">booking_in</span><span class="o">.</span><span class="n">end_time</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Room is already booked for this time range&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">booking</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">(</span>
+        <span class="n">user_id</span><span class="o">=</span><span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">],</span>
+        <span class="n">room_id</span><span class="o">=</span><span class="n">booking_in</span><span class="o">.</span><span class="n">room_id</span><span class="p">,</span>
+        <span class="n">start_time</span><span class="o">=</span><span class="n">booking_in</span><span class="o">.</span><span class="n">start_time</span><span class="p">,</span>
+        <span class="n">end_time</span><span class="o">=</span><span class="n">booking_in</span><span class="o">.</span><span class="n">end_time</span><span class="p">,</span>
+        <span class="n">status</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">BookingStatus</span><span class="o">.</span><span class="n">CONFIRMED</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">booking</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">booking</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">booking</span></div>
+
+
+
+<span class="c1"># ---------- My bookings (current user) ----------</span>
+
+
+<div class="viewcode-block" id="list_my_bookings">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.list_my_bookings">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/bookings/me&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">List</span><span class="p">[</span><span class="n">schemas</span><span class="o">.</span><span class="n">BookingRead</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">list_my_bookings</span><span class="p">(</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">claims</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user_claims</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    List bookings that belong to the authenticated user.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    claims : Dict</span>
+<span class="sd">        Decoded JWT claims containing the current user&#39;s ID.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    List[BookingRead]</span>
+<span class="sd">        Bookings for the current user, ordered by start_time descending.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
+    <span class="n">bookings</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">start_time</span><span class="o">.</span><span class="n">desc</span><span class="p">())</span>
+        <span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">bookings</span></div>
+
+
+
+<span class="c1"># ---------- Admin / facility: list all bookings ----------</span>
+
+
+<div class="viewcode-block" id="list_all_bookings">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.list_all_bookings">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/bookings&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">List</span><span class="p">[</span><span class="n">schemas</span><span class="o">.</span><span class="n">BookingRead</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">list_all_bookings</span><span class="p">(</span>
+    <span class="n">room_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">Query</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">Query</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_facility_or_auditor</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin/Facility/Auditor: view all bookings with optional filters.</span>
+
+<span class="sd">    Access</span>
+<span class="sd">    ------</span>
+<span class="sd">    - Allowed roles: admin, facility_manager, auditor.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    room_id : Optional[int]</span>
+<span class="sd">        If provided, filter bookings for a specific room.</span>
+<span class="sd">    user_id : Optional[int]</span>
+<span class="sd">        If provided, filter bookings for a specific user.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    List[BookingRead]</span>
+<span class="sd">        List of bookings matching the filters, ordered by start_time descending.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">room_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">room_id</span> <span class="o">==</span> <span class="n">room_id</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">user_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">q</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">start_time</span><span class="o">.</span><span class="n">desc</span><span class="p">())</span><span class="o">.</span><span class="n">all</span><span class="p">()</span></div>
+
+
+
+<span class="c1"># ---------- Update booking (time/room/status) ----------</span>
+
+
+<div class="viewcode-block" id="update_booking">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.update_booking">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;/bookings/</span><span class="si">{booking_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">BookingRead</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">update_booking</span><span class="p">(</span>
+    <span class="n">booking_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">update_data</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">BookingUpdate</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">claims</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user_claims</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Update an existing booking&#39;s room, time, or status.</span>
+
+<span class="sd">    Access</span>
+<span class="sd">    ------</span>
+<span class="sd">    - Owner of the booking.</span>
+<span class="sd">    - Admin or facility_manager for any booking.</span>
+<span class="sd">    - Auditor and service_account cannot modify bookings.</span>
+
+<span class="sd">    Behavior</span>
+<span class="sd">    --------</span>
+<span class="sd">    - Applies only the fields provided in BookingUpdate.</span>
+<span class="sd">    - Re-validates the final time range.</span>
+<span class="sd">    - Ensures no conflicts with other non-cancelled bookings.</span>
+<span class="sd">    - Optionally updates the booking status.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    booking_id : int</span>
+<span class="sd">        ID of the booking to update.</span>
+<span class="sd">    update_data : BookingUpdate</span>
+<span class="sd">        Partial update data for the booking.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    claims : Dict</span>
+<span class="sd">        Decoded JWT claims.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    BookingRead</span>
+<span class="sd">        The updated booking.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If the booking is not found, the user is not allowed,</span>
+<span class="sd">        the time range is invalid, or there is a conflict.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot modify bookings&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">booking</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">booking_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">booking</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Booking not found&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">is_admin_or_facility</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">)</span>
+    <span class="n">is_owner</span> <span class="o">=</span> <span class="n">booking</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin_or_facility</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to update this booking&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Determine new values (fallback to existing ones if not provided)</span>
+    <span class="n">new_room_id</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">room_id</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">room_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">room_id</span>
+    <span class="n">new_start_time</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">start_time</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">start_time</span>
+    <span class="n">new_end_time</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">end_time</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">end_time</span>
+
+    <span class="c1"># Validate time</span>
+    <span class="n">ensure_time_valid</span><span class="p">(</span><span class="n">new_start_time</span><span class="p">,</span> <span class="n">new_end_time</span><span class="p">)</span>
+
+    <span class="c1"># Check for conflicts (ignore this booking itself)</span>
+    <span class="k">if</span> <span class="n">has_conflict</span><span class="p">(</span>
+        <span class="n">db</span><span class="p">,</span>
+        <span class="n">room_id</span><span class="o">=</span><span class="n">new_room_id</span><span class="p">,</span>
+        <span class="n">start_time</span><span class="o">=</span><span class="n">new_start_time</span><span class="p">,</span>
+        <span class="n">end_time</span><span class="o">=</span><span class="n">new_end_time</span><span class="p">,</span>
+        <span class="n">ignore_booking_id</span><span class="o">=</span><span class="n">booking</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Room is already booked for this time range&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Apply updates</span>
+    <span class="n">booking</span><span class="o">.</span><span class="n">room_id</span> <span class="o">=</span> <span class="n">new_room_id</span>
+    <span class="n">booking</span><span class="o">.</span><span class="n">start_time</span> <span class="o">=</span> <span class="n">new_start_time</span>
+    <span class="n">booking</span><span class="o">.</span><span class="n">end_time</span> <span class="o">=</span> <span class="n">new_end_time</span>
+
+    <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">booking</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">status</span>
+
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">booking</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">booking</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">booking</span></div>
+
+
+
+<span class="c1"># ---------- Cancel booking (soft) ----------</span>
+
+
+<div class="viewcode-block" id="cancel_booking">
+<a class="viewcode-back" href="../../bookings_service.html#bookings_service.main.cancel_booking">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;/bookings/</span><span class="si">{booking_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_204_NO_CONTENT</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cancel_booking</span><span class="p">(</span>
+    <span class="n">booking_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">claims</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_current_user_claims</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Cancel (soft-delete) an existing booking.</span>
+
+<span class="sd">    Access</span>
+<span class="sd">    ------</span>
+<span class="sd">    - Owner of the booking.</span>
+<span class="sd">    - Admin or facility_manager for any booking.</span>
+<span class="sd">    - Auditor and service_account cannot cancel bookings.</span>
+
+<span class="sd">    Behavior</span>
+<span class="sd">    --------</span>
+<span class="sd">    - Sets the booking status to CANCELLED.</span>
+<span class="sd">    - Does not physically delete the record.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    booking_id : int</span>
+<span class="sd">        ID of the booking to cancel.</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+<span class="sd">    claims : Dict</span>
+<span class="sd">        Decoded JWT claims.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If the booking does not exist or the user is not allowed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># ❗ block read-only / service accounts</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot cancel bookings&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">booking</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">booking_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">booking</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Booking not found&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">is_admin_or_facility</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">)</span>
+    <span class="n">is_owner</span> <span class="o">=</span> <span class="n">booking</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin_or_facility</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to cancel this booking&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">booking</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">BookingStatus</span><span class="o">.</span><span class="n">CANCELLED</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">booking</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="k">return</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">Smart Meeting Room & Management System</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../users_service.html">Users Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../rooms_service.html">Rooms Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../bookings_service.html">Bookings Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reviews_service.html">Reviews Service API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Ahmad Hlayhel & Boulos Boulos.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

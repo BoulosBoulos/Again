@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>users_service.models &#8212; Smart Meeting Room &amp; Management System 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for users_service.models</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span> <span class="k">as</span> <span class="n">PyEnum</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Boolean</span><span class="p">,</span> <span class="n">Column</span><span class="p">,</span> <span class="n">DateTime</span><span class="p">,</span> <span class="n">Integer</span><span class="p">,</span> <span class="n">String</span><span class="p">,</span> <span class="n">Enum</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.database</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
+
+
+<div class="viewcode-block" id="UserRole">
+<a class="viewcode-back" href="../../users_service.html#users_service.models.UserRole">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UserRole</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">PyEnum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enumeration of all supported user roles in the system.</span>
+
+<span class="sd">    Roles</span>
+<span class="sd">    -----</span>
+<span class="sd">    admin</span>
+<span class="sd">        Full administrative privileges across all services.</span>
+<span class="sd">    regular</span>
+<span class="sd">        Standard end user with access to their own data and bookings.</span>
+<span class="sd">    facility_manager</span>
+<span class="sd">        Power user for rooms and bookings (inventory/space management).</span>
+<span class="sd">    moderator</span>
+<span class="sd">        Lightweight review administrator with moderation rights.</span>
+<span class="sd">    auditor</span>
+<span class="sd">        Read-only user for compliance and auditing.</span>
+<span class="sd">    service_account</span>
+<span class="sd">        Non-human account used for inter-service communication.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ADMIN</span> <span class="o">=</span> <span class="s2">&quot;admin&quot;</span>
+    <span class="n">REGULAR</span> <span class="o">=</span> <span class="s2">&quot;regular&quot;</span>
+    <span class="n">FACILITY_MANAGER</span> <span class="o">=</span> <span class="s2">&quot;facility_manager&quot;</span>
+    <span class="n">MODERATOR</span> <span class="o">=</span> <span class="s2">&quot;moderator&quot;</span>
+    <span class="n">AUDITOR</span> <span class="o">=</span> <span class="s2">&quot;auditor&quot;</span>
+    <span class="n">SERVICE_ACCOUNT</span> <span class="o">=</span> <span class="s2">&quot;service_account&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="User">
+<a class="viewcode-back" href="../../users_service.html#users_service.models.User">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">User</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    SQLAlchemy model for application users.</span>
+
+<span class="sd">    This model stores authentication and authorization information</span>
+<span class="sd">    such as username, hashed password, and role.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    id : int</span>
+<span class="sd">        Primary key.</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Full display name of the user.</span>
+<span class="sd">    username : str</span>
+<span class="sd">        Unique username used for login.</span>
+<span class="sd">    email : str</span>
+<span class="sd">        Unique email address of the user.</span>
+<span class="sd">    hashed_password : str</span>
+<span class="sd">        Bcrypt-hashed password.</span>
+<span class="sd">    role : UserRole</span>
+<span class="sd">        Role controlling access privileges.</span>
+<span class="sd">    is_active : bool</span>
+<span class="sd">        Flag indicating whether the user is active.</span>
+<span class="sd">    created_at : datetime</span>
+<span class="sd">        Timestamp of user creation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;users&quot;</span>
+
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">email</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">hashed_password</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">role</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Enum</span><span class="p">(</span><span class="n">UserRole</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">UserRole</span><span class="o">.</span><span class="n">REGULAR</span><span class="p">)</span>
+    <span class="n">is_active</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Boolean</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">created_at</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">Smart Meeting Room & Management System</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../users_service.html">Users Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../rooms_service.html">Rooms Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../bookings_service.html">Bookings Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reviews_service.html">Reviews Service API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Ahmad Hlayhel & Boulos Boulos.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
