@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../..'))  # points to repo root
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -14,7 +18,14 @@ release = '1.0.0'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = []
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",   # for our Google/Numpy style docstrings
+    "sphinx.ext.viewcode",   # link to source code
+    "sphinx.ext.autosummary",
+]
+autosummary_generate = True
+
 
 templates_path = ['_templates']
 exclude_patterns = []

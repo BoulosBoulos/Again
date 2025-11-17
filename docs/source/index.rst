@@ -11,7 +11,15 @@ Add your content using ``reStructuredText`` syntax. See the
 documentation for details.
 
 
+Smart Meeting Room Backend
+==========================
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+
+   users_service
+   rooms_service
+   bookings_service
+   reviews_service
 
