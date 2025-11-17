@@ -16,6 +16,14 @@ app = FastAPI(title="Bookings Service", version="1.0.0")
 
 @app.get("/")
 def root():
+    """
+    Health-check endpoint for the Bookings service.
+
+    Returns
+    -------
+    dict
+        A small JSON payload indicating that the service is running.
+    """
     return {"service": "bookings", "status": "running"}
 
 
@@ -23,6 +31,21 @@ admin_facility_or_auditor = require_roles("admin", "facility_manager", "auditor"
 
 
 def ensure_time_valid(start_time: datetime, end_time: datetime):
+    """
+    Validate that a booking time range is well-formed.
+
+    Parameters
+    ----------
+    start_time : datetime
+        Start of the requested booking.
+    end_time : datetime
+        End of the requested booking.
+
+    Raises
+    ------
+    HTTPException
+        If end_time is not strictly after start_time.
+    """
     if end_time <= start_time:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -40,8 +63,28 @@ def has_conflict(
     """
     Check if there is any overlapping booking on the same room.
 
-    - Ignores bookings with status=CANCELLED
-    - If ignore_booking_id is provided, exclude that booking (useful when updating)
+    Overlaps are detected for all bookings in the given room where:
+    - status != CANCELLED
+    - existing.end_time > start_time
+    - existing.start_time < end_time
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+    room_id : int
+        Room identifier.
+    start_time : datetime
+        Proposed start time.
+    end_time : datetime
+        Proposed end time.
+    ignore_booking_id : Optional[int]
+        If provided, ignore this booking (useful when updating).
+
+    Returns
+    -------
+    bool
+        True if there is at least one conflicting booking, False otherwise.
     """
     q = (
         db.query(models.Booking)
@@ -68,9 +111,30 @@ def check_availability(
     db: Session = Depends(get_db),
 ):
     """
-    Check if a room is available for a given time range.
+    Check if a room is available during a given time range.
 
-    Returns: {"room_id": ..., "available": true/false}
+    Parameters
+    ----------
+    room_id : int
+        Room to check.
+    start_time : datetime
+        Start of the desired interval (ISO 8601).
+    end_time : datetime
+        End of the desired interval (ISO 8601).
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    dict
+        JSON object with:
+        - 'room_id' : int
+        - 'available' : bool
+
+    Raises
+    ------
+    HTTPException
+        If the time range is invalid.
     """
     ensure_time_valid(start_time, end_time)
     busy = has_conflict(db, room_id, start_time, end_time)
@@ -93,6 +157,40 @@ def create_booking(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    """
+    Create a new booking for the authenticated user.
+
+    Access
+    ------
+    - Denied for roles: auditor, service_account.
+    - Allowed for: regular, admin, facility_manager, moderator.
+
+    Behavior
+    --------
+    - Validates that the time range is correct.
+    - Rejects bookings that overlap with existing non-cancelled bookings.
+    - Uses the user_id from the JWT claims as the booking owner.
+
+    Parameters
+    ----------
+    booking_in : BookingCreate
+        Room and time information for the new booking.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims (user_id, role, etc.).
+
+    Returns
+    -------
+    BookingRead
+        The newly created booking.
+
+    Raises
+    ------
+    HTTPException
+        If the user role is read-only, the time range is invalid,
+        or the room is already booked.
+    """
         # ❗ Auditor and service accounts are read-only / system-only
     if claims["role"] in ("auditor", "service_account"):
         raise HTTPException(
@@ -135,7 +233,19 @@ def list_my_bookings(
     claims: Dict = Depends(get_current_user_claims),
 ):
     """
-    Return booking history for the currently authenticated user.
+    List bookings that belong to the authenticated user.
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims containing the current user's ID.
+
+    Returns
+    -------
+    List[BookingRead]
+        Bookings for the current user, ordered by start_time descending.
     """
     user_id = claims["user_id"]
     bookings = (
@@ -158,11 +268,25 @@ def list_all_bookings(
     _: Dict = Depends(admin_facility_or_auditor),
 ):
     """
-    Admin/facility_manager: view all bookings.
+    Admin/Facility/Auditor: view all bookings with optional filters.
 
-    Optional filters:
-    - room_id
-    - user_id (useful for per-user booking history)
+    Access
+    ------
+    - Allowed roles: admin, facility_manager, auditor.
+
+    Parameters
+    ----------
+    room_id : Optional[int]
+        If provided, filter bookings for a specific room.
+    user_id : Optional[int]
+        If provided, filter bookings for a specific user.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    List[BookingRead]
+        List of bookings matching the filters, ordered by start_time descending.
     """
     q = db.query(models.Booking)
 
@@ -185,6 +309,44 @@ def update_booking(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    """
+    Update an existing booking's room, time, or status.
+
+    Access
+    ------
+    - Owner of the booking.
+    - Admin or facility_manager for any booking.
+    - Auditor and service_account cannot modify bookings.
+
+    Behavior
+    --------
+    - Applies only the fields provided in BookingUpdate.
+    - Re-validates the final time range.
+    - Ensures no conflicts with other non-cancelled bookings.
+    - Optionally updates the booking status.
+
+    Parameters
+    ----------
+    booking_id : int
+        ID of the booking to update.
+    update_data : BookingUpdate
+        Partial update data for the booking.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims.
+
+    Returns
+    -------
+    BookingRead
+        The updated booking.
+
+    Raises
+    ------
+    HTTPException
+        If the booking is not found, the user is not allowed,
+        the time range is invalid, or there is a conflict.
+    """
     if claims["role"] in ("auditor", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -250,6 +412,38 @@ def cancel_booking(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    """
+    Cancel (soft-delete) an existing booking.
+
+    Access
+    ------
+    - Owner of the booking.
+    - Admin or facility_manager for any booking.
+    - Auditor and service_account cannot cancel bookings.
+
+    Behavior
+    --------
+    - Sets the booking status to CANCELLED.
+    - Does not physically delete the record.
+
+    Parameters
+    ----------
+    booking_id : int
+        ID of the booking to cancel.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the booking does not exist or the user is not allowed.
+    """
     # ❗ block read-only / service accounts
     if claims["role"] in ("auditor", "service_account"):
         raise HTTPException(

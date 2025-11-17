@@ -15,6 +15,14 @@ app = FastAPI(title="Reviews Service", version="1.0.0")
 
 @app.get("/")
 def root():
+    """
+    Health-check endpoint for the Reviews service.
+
+    Returns
+    -------
+    dict
+        A small JSON payload indicating that the service is running.
+    """
     return {"service": "reviews", "status": "running"}
 
 
@@ -23,6 +31,26 @@ admin_mod_or_auditor = require_roles("admin", "moderator", "auditor")
 
 
 def get_review_or_404(db: Session, review_id: int) -> models.Review:
+    """
+    Load a review by ID or raise HTTP 404.
+
+    Parameters
+    ----------
+    db : Session
+        Database session.
+    review_id : int
+        Identifier of the review.
+
+    Returns
+    -------
+    Review
+        The matching review instance.
+
+    Raises
+    ------
+    HTTPException
+        If the review does not exist.
+    """
     review = db.query(models.Review).filter(models.Review.id == review_id).first()
     if not review:
         raise HTTPException(
@@ -45,6 +73,39 @@ def create_review(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    """
+    Create a new review for a meeting room.
+
+    Access
+    ------
+    - Denied for roles: auditor, service_account.
+    - Allowed for: regular, admin, facility_manager, moderator.
+
+    Behavior
+    --------
+    - Each user can only submit one review per room.
+    - Rating and comment are validated through Pydantic.
+    - The authenticated user's ID is used as the review owner.
+
+    Parameters
+    ----------
+    review_in : ReviewCreate
+        Room ID, rating, and comment.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims containing user_id and role.
+
+    Returns
+    -------
+    ReviewRead
+        The newly created review.
+
+    Raises
+    ------
+    HTTPException
+        If the role is read-only or the user already reviewed this room.
+    """
     # ❗ no writes for auditor / service_account
     if claims["role"] in ("auditor", "service_account"):
         raise HTTPException(
@@ -87,7 +148,24 @@ def list_room_reviews(
     db: Session = Depends(get_db),
 ):
     """
-    Public endpoint: returns only non-hidden reviews for a room.
+    Public endpoint: list visible reviews for a specific room.
+
+    Behavior
+    --------
+    - Returns only reviews where is_hidden is False.
+    - Sorted by creation time in descending order.
+
+    Parameters
+    ----------
+    room_id : int
+        Room whose reviews are requested.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    List[ReviewRead]
+        Non-hidden reviews for the given room.
     """
     reviews = (
         db.query(models.Review)
@@ -114,13 +192,36 @@ def list_all_reviews(
     _: Dict = Depends(admin_mod_or_auditor),
 ):
     """
-    Admin/moderator view.
+    Admin/Moderator/Auditor view of all reviews with filters.
 
-    Optional filters:
-    - room_id
-    - user_id
-    - only_flagged
-    - include_hidden (if False, hides hidden reviews)
+    Access
+    ------
+    - Allowed roles: admin, moderator, auditor.
+
+    Optional filters
+    ----------------
+    - room_id : filter by room.
+    - user_id : filter by review author.
+    - only_flagged : if True, only return flagged reviews.
+    - include_hidden : if False, exclude hidden reviews.
+
+    Parameters
+    ----------
+    room_id : Optional[int]
+        Room filter.
+    user_id : Optional[int]
+        User filter.
+    only_flagged : bool
+        Whether to restrict results to flagged reviews.
+    include_hidden : bool
+        Whether to include hidden reviews in the response.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    List[ReviewRead]
+        Reviews matching the specified filters.
     """
     q = db.query(models.Review)
 
@@ -149,6 +250,41 @@ def update_review(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    """
+    Update an existing review's rating and/or comment.
+
+    Access
+    ------
+    - Review owner.
+    - Admin or moderator.
+    - Auditor and service_account cannot modify reviews.
+
+    Behavior
+    --------
+    - Only provided fields are updated.
+    - Uses Pydantic validation for rating and comment.
+
+    Parameters
+    ----------
+    review_id : int
+        ID of the review to update.
+    update_data : ReviewUpdate
+        New rating and/or comment.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims.
+
+    Returns
+    -------
+    ReviewRead
+        Updated review.
+
+    Raises
+    ------
+    HTTPException
+        If the review does not exist or the user is not allowed.
+    """
     # ❗ no writes for auditor / service_account
     if claims["role"] in ("auditor", "service_account"):
         raise HTTPException(
@@ -186,6 +322,33 @@ def delete_review(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
 ):
+    """
+    Permanently delete a review.
+
+    Access
+    ------
+    - Review owner.
+    - Admin or moderator.
+    - Auditor and service_account cannot delete reviews.
+
+    Parameters
+    ----------
+    review_id : int
+        ID of the review to delete.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException
+        If the review does not exist or the user is not allowed.
+    """
     # ❗ no writes for auditor / service_account
     if claims["role"] in ("auditor", "service_account"):
         raise HTTPException(
@@ -219,7 +382,34 @@ def flag_review(
     claims: Dict = Depends(get_current_user_claims),
 ):
     """
-    Any authenticated user can flag a review.
+    Flag a review as potentially inappropriate.
+
+    Access
+    ------
+    - Any authenticated user except auditor and service_account.
+
+    Behavior
+    --------
+    - Sets is_flagged = True on the review.
+
+    Parameters
+    ----------
+    review_id : int
+        ID of the review to flag.
+    db : Session
+        Database session.
+    claims : Dict
+        Decoded JWT claims.
+
+    Returns
+    -------
+    ReviewRead
+        The updated review after flagging.
+
+    Raises
+    ------
+    HTTPException
+        If the review does not exist or user role is read-only.
     """
     # ❗ no writes for auditor / service_account
     if claims["role"] in ("auditor", "service_account"):
@@ -244,7 +434,27 @@ def hide_review(
     _: Dict = Depends(admin_or_moderator),
 ):
     """
-    Admin/moderator can hide a review from public room view.
+    Hide a review from public room listings.
+
+    Access
+    ------
+    - Admin or moderator.
+
+    Behavior
+    --------
+    - Sets is_hidden = True.
+
+    Parameters
+    ----------
+    review_id : int
+        ID of the review to hide.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    ReviewRead
+        The updated review after hiding.
     """
     review = get_review_or_404(db, review_id)
     review.is_hidden = True
@@ -261,7 +471,27 @@ def unhide_review(
     _: Dict = Depends(admin_or_moderator),
 ):
     """
-    Admin/moderator can unhide a review.
+    Unhide a previously hidden review.
+
+    Access
+    ------
+    - Admin or moderator.
+
+    Behavior
+    --------
+    - Sets is_hidden = False.
+
+    Parameters
+    ----------
+    review_id : int
+        ID of the review to unhide.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    ReviewRead
+        The updated review after unhiding.
     """
     review = get_review_or_404(db, review_id)
     review.is_hidden = False
@@ -277,7 +507,27 @@ def unflag_review(
     _: Dict = Depends(admin_or_moderator),
 ):
     """
-    Admin/moderator: clear the flag on a review.
+    Clear the flag on a review.
+
+    Access
+    ------
+    - Admin or moderator.
+
+    Behavior
+    --------
+    - Sets is_flagged = False.
+
+    Parameters
+    ----------
+    review_id : int
+        ID of the review to unflag.
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    ReviewRead
+        The updated review after unflagging.
     """
     review = get_review_or_404(db, review_id)
     review.is_flagged = False

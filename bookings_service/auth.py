@@ -15,8 +15,27 @@ async def get_current_user_claims(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Dict[str, Any]:
     """
-    Decode JWT from Authorization: Bearer <token>
-    and return {"user_id": ..., "username": ..., "role": ...}.
+    Decode a JWT bearer token and extract user claims.
+
+    The token is expected in the Authorization header as a Bearer token.
+
+    Parameters
+    ----------
+    credentials : HTTPAuthorizationCredentials
+        Parsed Authorization header.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary containing:
+        - 'user_id' : int
+        - 'username' : str
+        - 'role' : str
+
+    Raises
+    ------
+    HTTPException
+        If the token is missing, invalid, or cannot be decoded.
     """
     token = credentials.credentials
 
@@ -40,6 +59,20 @@ async def get_current_user_claims(
 
 
 def require_roles(*allowed_roles: str) -> Callable:
+    """
+    Build a dependency that enforces role-based access for bookings endpoints.
+
+    Parameters
+    ----------
+    allowed_roles : str
+        One or more role names that are allowed to access the route.
+
+    Returns
+    -------
+    Callable
+        A FastAPI dependency that checks the caller's role from JWT claims
+        and raises HTTP 403 if access is not permitted.
+    """
     async def dependency(claims: Dict[str, Any] = Depends(get_current_user_claims)):
         if claims["role"] not in allowed_roles:
             raise HTTPException(

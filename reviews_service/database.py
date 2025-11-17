@@ -16,6 +16,18 @@ Base = declarative_base()
 
 
 def get_db():
+    """
+    Yield a SQLAlchemy database session for the Reviews service.
+
+    This function is intended for use as a FastAPI dependency, providing
+    a scoped session per request and ensuring that the session is closed
+    once the request is finished.
+
+    Yields
+    ------
+    Session
+        Active SQLAlchemy session bound to the reviews database engine.
+    """
     db = SessionLocal()
     try:
         yield db
