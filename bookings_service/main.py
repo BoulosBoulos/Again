@@ -27,7 +27,20 @@ def root():
     return {"service": "bookings", "status": "running"}
 
 
-admin_facility_or_auditor = require_roles("admin", "facility_manager", "auditor")
+admin_facility_or_auditor = require_roles(
+    "admin",
+    "facility_manager",
+    "auditor",
+    "service_account",  # internal read-only access
+)
+
+availability_roles = require_roles(
+    "admin",
+    "regular",
+    "facility_manager",
+    "auditor",
+    "service_account",  # used by Rooms/Users services for inter-service checks
+)
 
 
 def ensure_time_valid(start_time: datetime, end_time: datetime):
@@ -109,9 +122,15 @@ def check_availability(
     start_time: datetime,
     end_time: datetime,
     db: Session = Depends(get_db),
+    _: Dict = Depends(availability_roles),
 ):
     """
     Check if a room is available during a given time range.
+
+    Access
+    ------
+    - Allowed roles: admin, regular, facility_manager, auditor, service_account.
+    - Moderator is not allowed to call this endpoint.
 
     Parameters
     ----------
@@ -144,7 +163,7 @@ def check_availability(
     }
 
 
-# ---------- Create booking (regular user) ----------
+# ---------- Create booking (regular / power users) ----------
 
 
 @app.post(
@@ -162,8 +181,8 @@ def create_booking(
 
     Access
     ------
-    - Denied for roles: auditor, service_account.
-    - Allowed for: regular, admin, facility_manager, moderator.
+    - Allowed for: regular, admin, facility_manager.
+    - Denied for roles: auditor, moderator, service_account.
 
     Behavior
     --------
@@ -188,11 +207,11 @@ def create_booking(
     Raises
     ------
     HTTPException
-        If the user role is read-only, the time range is invalid,
+        If the user role is not allowed, the time range is invalid,
         or the room is already booked.
     """
-        # ❗ Auditor and service accounts are read-only / system-only
-    if claims["role"] in ("auditor", "service_account"):
+    # ❗ Roles that cannot create bookings: auditor, moderator, service accounts
+    if claims["role"] in ("auditor", "moderator", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This role cannot create bookings",
@@ -235,6 +254,11 @@ def list_my_bookings(
     """
     List bookings that belong to the authenticated user.
 
+    Access
+    ------
+    - Allowed for: admin, facility_manager, regular.
+    - Denied for: auditor, moderator, service_account.
+
     Parameters
     ----------
     db : Session
@@ -247,6 +271,12 @@ def list_my_bookings(
     List[BookingRead]
         Bookings for the current user, ordered by start_time descending.
     """
+    # Only admin, facility_manager, and regular users can have personal bookings
+    if claims["role"] not in ("admin", "facility_manager", "regular"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role cannot have personal bookings",
+        )
     user_id = claims["user_id"]
     bookings = (
         db.query(models.Booking)
@@ -257,7 +287,7 @@ def list_my_bookings(
     return bookings
 
 
-# ---------- Admin / facility: list all bookings ----------
+# ---------- Admin / facility / auditor / service: list all bookings ----------
 
 
 @app.get("/bookings", response_model=List[schemas.BookingRead])
@@ -268,11 +298,11 @@ def list_all_bookings(
     _: Dict = Depends(admin_facility_or_auditor),
 ):
     """
-    Admin/Facility/Auditor: view all bookings with optional filters.
+    Admin/Facility/Auditor/Service Account: view all bookings with optional filters.
 
     Access
     ------
-    - Allowed roles: admin, facility_manager, auditor.
+    - Allowed roles: admin, facility_manager, auditor, service_account.
 
     Parameters
     ----------
@@ -315,8 +345,8 @@ def update_booking(
     Access
     ------
     - Owner of the booking.
-    - Admin or facility_manager for any booking.
-    - Auditor and service_account cannot modify bookings.
+    - Admin for any booking.
+    - Auditor, moderator, and service_account cannot modify bookings.
 
     Behavior
     --------
@@ -347,7 +377,7 @@ def update_booking(
         If the booking is not found, the user is not allowed,
         the time range is invalid, or there is a conflict.
     """
-    if claims["role"] in ("auditor", "service_account"):
+    if claims["role"] in ("auditor", "moderator", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This role cannot modify bookings",
@@ -359,19 +389,28 @@ def update_booking(
             detail="Booking not found",
         )
 
-    is_admin_or_facility = claims["role"] in ("admin", "facility_manager")
+    is_admin = claims["role"] == "admin"
     is_owner = booking.user_id == claims["user_id"]
 
-    if not (is_admin_or_facility or is_owner):
+    # Admin can update any booking; others only their own
+    if not (is_admin or is_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed to update this booking",
         )
 
     # Determine new values (fallback to existing ones if not provided)
-    new_room_id = update_data.room_id if update_data.room_id is not None else booking.room_id
-    new_start_time = update_data.start_time if update_data.start_time is not None else booking.start_time
-    new_end_time = update_data.end_time if update_data.end_time is not None else booking.end_time
+    new_room_id = (
+        update_data.room_id if update_data.room_id is not None else booking.room_id
+    )
+    new_start_time = (
+        update_data.start_time
+        if update_data.start_time is not None
+        else booking.start_time
+    )
+    new_end_time = (
+        update_data.end_time if update_data.end_time is not None else booking.end_time
+    )
 
     # Validate time
     ensure_time_valid(new_start_time, new_end_time)
@@ -418,8 +457,8 @@ def cancel_booking(
     Access
     ------
     - Owner of the booking.
-    - Admin or facility_manager for any booking.
-    - Auditor and service_account cannot cancel bookings.
+    - Admin for any booking.
+    - Auditor, moderator, and service_account cannot cancel bookings.
 
     Behavior
     --------
@@ -445,7 +484,7 @@ def cancel_booking(
         If the booking does not exist or the user is not allowed.
     """
     # ❗ block read-only / service accounts
-    if claims["role"] in ("auditor", "service_account"):
+    if claims["role"] in ("auditor", "moderator", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This role cannot cancel bookings",
@@ -457,10 +496,11 @@ def cancel_booking(
             detail="Booking not found",
         )
 
-    is_admin_or_facility = claims["role"] in ("admin", "facility_manager")
+    is_admin = claims["role"] == "admin"
     is_owner = booking.user_id == claims["user_id"]
 
-    if not (is_admin_or_facility or is_owner):
+    # Admin can cancel any; others only their own
+    if not (is_admin or is_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed to cancel this booking",

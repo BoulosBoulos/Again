@@ -1,5 +1,7 @@
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from jose import jwt
+from .auth import SECRET_KEY, ALGORITHM
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -14,6 +16,10 @@ import httpx
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Rooms Service", version="1.0.0")
+
+SERVICE_ACCOUNT_USERNAME = "rooms_service"
+SERVICE_ACCOUNT_USER_ID = 0
+SERVICE_ACCOUNT_ROLE = "service_account"
 
 BOOKINGS_SERVICE_URL = os.getenv(
     "BOOKINGS_SERVICE_URL",
@@ -36,6 +42,22 @@ def root():
 
 admin_or_facility = require_roles("admin", "facility_manager")
 
+viewer_roles = require_roles(
+    "admin",
+    "regular",
+    "facility_manager",
+    "auditor",
+    "service_account",  # for inter-service calls if needed
+)
+
+def make_service_account_token() -> str:
+    payload = {
+        "sub": SERVICE_ACCOUNT_USERNAME,
+        "role": SERVICE_ACCOUNT_ROLE,
+        "user_id": SERVICE_ACCOUNT_USER_ID,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 # ---------- Create room ----------
 
@@ -104,6 +126,7 @@ def list_rooms(
     location: Optional[str] = None,
     equipment_contains: Optional[str] = None,
     db: Session = Depends(get_db),
+    _: dict = Depends(viewer_roles),   # <- RBAC: who can view/search rooms
 ):
     """
     Retrieve available rooms with optional filters.
@@ -150,7 +173,11 @@ def list_rooms(
 
 
 @app.get("/rooms/{room_id}", response_model=schemas.RoomRead)
-def get_room(room_id: int, db: Session = Depends(get_db)):
+def get_room(
+    room_id: int,
+    db: Session = Depends(get_db),
+    _: dict = Depends(viewer_roles),   # <- RBAC: who can view room details
+):
     """
     Retrieve a single room by its ID.
 
@@ -303,6 +330,7 @@ def room_status(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     db: Session = Depends(get_db),
+    _: dict = Depends(viewer_roles),   # <- RBAC: who can view room status
 ):
     """
     Report the status of a room, optionally for a time range.
@@ -319,30 +347,10 @@ def room_status(
         * Returns:
             - "available" if the room is free in that interval.
             - "booked" if the room is occupied in that interval.
-
-    Parameters
-    ----------
-    room_id : int
-        ID of the room to check.
-    start_time : Optional[datetime]
-        Start of the time window (ISO 8601).
-    end_time : Optional[datetime]
-        End of the time window (ISO 8601).
-    db : Session
-        Database session.
-
-    Returns
-    -------
-    dict
-        JSON object with keys {'room_id', 'status'}.
-
-    Raises
-    ------
-    HTTPException
-        If the room does not exist, the time range is invalid,
-        or the Bookings service cannot be reached.
     """
+
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    
     if not room or not room.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -362,7 +370,10 @@ def room_status(
             detail="end_time must be after start_time",
         )
 
-    # Ask Bookings service about time-based availability
+    # Generate a short-lived service account token for inter-service call
+    token = make_service_account_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
     try:
         resp = httpx.get(
             f"{BOOKINGS_SERVICE_URL}/bookings/availability",
@@ -371,6 +382,7 @@ def room_status(
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
             },
+            headers=headers,
             timeout=5.0,
         )
     except httpx.RequestError:

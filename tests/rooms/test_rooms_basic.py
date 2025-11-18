@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if PROJECT_ROOT not in sys.path:
@@ -9,7 +9,7 @@ if PROJECT_ROOT not in sys.path:
 import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
-import httpx  
+import httpx
 
 from rooms_service.main import app
 from rooms_service.database import Base, engine
@@ -32,7 +32,7 @@ def make_token(username: str, role: str) -> str:
     payload = {
         "sub": username,
         "role": role,
-        "exp": datetime.utcnow() + timedelta(minutes=15),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -79,7 +79,7 @@ def test_admin_can_create_room():
     assert body["is_out_of_service"] is False
 
 
-def test_list_rooms_is_public_and_excludes_out_of_service():
+def test_list_rooms_requires_auth_and_excludes_out_of_service():
     token = make_token("admin1", "admin")
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -108,7 +108,8 @@ def test_list_rooms_is_public_and_excludes_out_of_service():
     assert res_update.status_code == 200
     assert res_update.json()["is_out_of_service"] is True
 
-    res_list = client.get("/rooms")
+    # list requires auth (viewer_roles)
+    res_list = client.get("/rooms", headers=headers)
     assert res_list.status_code == 200
     rooms = res_list.json()
     names = {r["name"] for r in rooms}
@@ -134,10 +135,11 @@ def test_admin_can_delete_room_soft():
     res_delete = client.delete(f"/rooms/{room_id}", headers=headers)
     assert res_delete.status_code == 204
 
-    res_get = client.get(f"/rooms/{room_id}")
+    # get also requires auth; should now be 404 because room is inactive
+    res_get = client.get(f"/rooms/{room_id}", headers=headers)
     assert res_get.status_code == 404
 
-    res_list = client.get("/rooms")
+    res_list = client.get("/rooms", headers=headers)
     assert res_list.status_code == 200
     rooms = res_list.json()
     ids = {r["id"] for r in rooms}
@@ -173,12 +175,14 @@ def test_room_filters_by_capacity_location_and_equipment():
             "location": "Building A",
             "equipment_contains": "projector",
         },
+        headers=headers,  # <- must be authenticated
     )
     assert res.status_code == 200
     rooms = res.json()
     names = {r["name"] for r in rooms}
     assert "Big Conf" in names
     assert "Small Room" not in names
+
 
 def test_facility_manager_can_create_and_update_room():
     token = make_token("fm1", "facility_manager")
@@ -203,6 +207,7 @@ def test_facility_manager_can_create_and_update_room():
     updated = res_update.json()
     assert updated["capacity"] == 12
     assert "projector" in updated["equipment"]
+
 
 def test_update_room_name_to_existing_one_fails():
     token = make_token("admin1", "admin")
@@ -236,6 +241,7 @@ def test_update_room_name_to_existing_one_fails():
     assert res_update.status_code == 400
     assert "exists" in res_update.json()["detail"].lower()
 
+
 def test_room_status_available_and_out_of_service():
     token = make_token("admin1", "admin")
     headers = {"Authorization": f"Bearer {token}"}
@@ -252,8 +258,8 @@ def test_room_status_available_and_out_of_service():
     room = res_create.json()
     room_id = room["id"]
 
-    # default status should be 'available'
-    res_status = client.get(f"/rooms/{room_id}/status")
+    # default status should be 'available' (room_status requires viewer_roles)
+    res_status = client.get(f"/rooms/{room_id}/status", headers=headers)
     assert res_status.status_code == 200
     assert res_status.json()["status"] == "available"
 
@@ -267,13 +273,18 @@ def test_room_status_available_and_out_of_service():
     assert res_update.json()["is_out_of_service"] is True
 
     # now status should be 'out_of_service'
-    res_status2 = client.get(f"/rooms/{room_id}/status")
+    res_status2 = client.get(f"/rooms/{room_id}/status", headers=headers)
     assert res_status2.status_code == 200
     assert res_status2.json()["status"] == "out_of_service"
 
+
 def test_get_nonexistent_room_returns_404():
-    res = client.get("/rooms/9999")
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    res = client.get("/rooms/9999", headers=headers)
     assert res.status_code == 404
+
 
 def test_room_status_uses_bookings_availability(monkeypatch):
     token = make_token("admin1", "admin")
@@ -299,24 +310,232 @@ def test_room_status_uses_bookings_availability(monkeypatch):
         def json(self):
             return self._json
 
-    def fake_httpx_get(url, params=None, timeout=None):
+    def fake_httpx_get(url, params=None, headers=None, timeout=None):
         # sanity check
         assert "/bookings/availability" in url
         assert params["room_id"] == room_id
         # pretend room is NOT available (booked)
         return FakeResponse(200, {"room_id": room_id, "available": False})
 
+    # patch httpx.get used inside room_status()
     monkeypatch.setattr(httpx, "get", fake_httpx_get)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     res_status = client.get(
         f"/rooms/{room_id}/status",
         params={
             "start_time": (now + timedelta(hours=1)).isoformat(),
             "end_time": (now + timedelta(hours=2)).isoformat(),
         },
+        headers=headers,
     )
     assert res_status.status_code == 200
     body = res_status.json()
     assert body["room_id"] == room_id
     assert body["status"] == "booked"
+
+def test_get_room_requires_auth():
+    # create a room as admin
+    admin_token = make_token("admin1", "admin")
+    headers_admin = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "name": "Auth Room",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    # try to get without auth → 403 (HTTPBearer)
+    res_get = client.get(f"/rooms/{room_id}")
+    assert res_get.status_code == 403
+
+
+def test_regular_user_can_view_rooms_and_details():
+    # admin creates a room
+    admin_token = make_token("admin1", "admin")
+    headers_admin = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "name": "Viewable Room",
+        "capacity": 8,
+        "equipment": "whiteboard",
+        "location": "Building B",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    # regular user can list and get details
+    user_token = make_token("user1", "regular")
+    headers_user = {"Authorization": f"Bearer {user_token}"}
+
+    res_list = client.get("/rooms", headers=headers_user)
+    assert res_list.status_code == 200
+    ids = {r["id"] for r in res_list.json()}
+    assert room_id in ids
+
+    res_get = client.get(f"/rooms/{room_id}", headers=headers_user)
+    assert res_get.status_code == 200
+    assert res_get.json()["name"] == "Viewable Room"
+
+
+def test_moderator_cannot_view_rooms_or_status():
+    # admin creates a room
+    admin_token = make_token("admin1", "admin")
+    headers_admin = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "name": "HiddenFromModerator",
+        "capacity": 6,
+        "equipment": "projector",
+        "location": "Building C",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    mod_token = make_token("mod1", "moderator")
+    headers_mod = {"Authorization": f"Bearer {mod_token}"}
+
+    # moderator cannot list rooms
+    res_list = client.get("/rooms", headers=headers_mod)
+    assert res_list.status_code == 403
+
+    # moderator cannot view room details
+    res_get = client.get(f"/rooms/{room_id}", headers=headers_mod)
+    assert res_get.status_code == 403
+
+    # moderator cannot view room status
+    res_status = client.get(f"/rooms/{room_id}/status", headers=headers_mod)
+    assert res_status.status_code == 403
+
+def test_create_room_with_duplicate_name_fails():
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = {
+        "name": "UniqueName",
+        "capacity": 10,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res1 = client.post("/rooms", json=payload, headers=headers)
+    assert res1.status_code == 201
+
+    # second with same name → 400
+    res2 = client.post("/rooms", json=payload, headers=headers)
+    assert res2.status_code == 400
+    assert "already exists" in res2.json()["detail"].lower()
+
+def test_room_status_invalid_time_range_returns_400():
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = {
+        "name": "BadTimeRoom",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    now = datetime.now(timezone.utc)
+    # end_time <= start_time
+    res_status = client.get(
+        f"/rooms/{room_id}/status",
+        params={
+            "start_time": (now + timedelta(hours=2)).isoformat(),
+            "end_time": (now + timedelta(hours=1)).isoformat(),
+        },
+        headers=headers,
+    )
+    assert res_status.status_code == 400
+    assert "end_time must be after start_time" in res_status.json()["detail"]
+
+
+def test_room_status_deleted_room_returns_404():
+    token = make_token("admin1", "admin")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = {
+        "name": "ToDeleteRoom",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    # soft-delete
+    res_delete = client.delete(f"/rooms/{room_id}", headers=headers)
+    assert res_delete.status_code == 204
+
+    # status on inactive room → 404
+    res_status = client.get(f"/rooms/{room_id}/status", headers=headers)
+    assert res_status.status_code == 404
+
+def test_regular_user_cannot_update_or_delete_room():
+    # admin creates room
+    admin_token = make_token("admin1", "admin")
+    headers_admin = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "name": "ProtectedRoom",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    # regular tries to update/delete
+    user_token = make_token("user1", "regular")
+    headers_user = {"Authorization": f"Bearer {user_token}"}
+
+    res_update = client.put(
+        f"/rooms/{room_id}",
+        json={"capacity": 99},
+        headers=headers_user,
+    )
+    assert res_update.status_code == 403
+
+    res_delete = client.delete(f"/rooms/{room_id}", headers=headers_user)
+    assert res_delete.status_code == 403
+
+
+def test_auditor_cannot_modify_rooms():
+    # admin creates room
+    admin_token = make_token("admin1", "admin")
+    headers_admin = {"Authorization": f"Bearer {admin_token}"}
+    payload = {
+        "name": "AuditOnlyRoom",
+        "capacity": 5,
+        "equipment": "projector",
+        "location": "Building A",
+    }
+    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    assert res_create.status_code == 201
+    room_id = res_create.json()["id"]
+
+    # auditor token
+    auditor_token = make_token("aud1", "auditor")
+    headers_aud = {"Authorization": f"Bearer {auditor_token}"}
+
+    # auditor CAN view rooms (viewer_roles)
+    res_list = client.get("/rooms", headers=headers_aud)
+    assert res_list.status_code == 200
+
+    # but CANNOT update or delete
+    res_update = client.put(
+        f"/rooms/{room_id}",
+        json={"capacity": 20},
+        headers=headers_aud,
+    )
+    assert res_update.status_code == 403
+
+    res_delete = client.delete(f"/rooms/{room_id}", headers=headers_aud)
+    assert res_delete.status_code == 403

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from .models import BookingStatus
 
@@ -12,9 +12,9 @@ class BookingBase(BaseModel):
 
     Shared fields used across booking create and read operations.
     """
-    room_id: int = Field(..., ge=1, example=1)
-    start_time: datetime = Field(..., example="2025-01-01T09:00:00")
-    end_time: datetime = Field(..., example="2025-01-01T10:00:00")
+    room_id: int = Field(..., ge=1)
+    start_time: datetime = Field(...)
+    end_time: datetime = Field(...)
 
 
 class BookingCreate(BookingBase):
@@ -49,5 +49,4 @@ class BookingRead(BookingBase):
     status: BookingStatus
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

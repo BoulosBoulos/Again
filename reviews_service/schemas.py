@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class ReviewBase(BaseModel):
@@ -11,8 +11,8 @@ class ReviewBase(BaseModel):
     Includes the target room, rating, and comment text, along with
     basic validation and sanitization for the comment field.
     """
-    room_id: int = Field(..., ge=1, example=1)
-    rating: int = Field(..., ge=1, le=5, example=4)
+    room_id: int = Field(..., ge=1)
+    rating: int = Field(..., ge=1, le=5)
     comment: str = Field(..., min_length=1, max_length=1000)
 
     @field_validator("comment")
@@ -76,5 +76,4 @@ class ReviewRead(ReviewBase):
     is_hidden: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

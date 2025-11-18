@@ -78,8 +78,8 @@ def create_review(
 
     Access
     ------
-    - Denied for roles: auditor, service_account.
-    - Allowed for: regular, admin, facility_manager, moderator.
+    - Denied for roles: auditor, moderator, service_account.
+    - Allowed for: regular, admin, facility_manager.
 
     Behavior
     --------
@@ -107,7 +107,7 @@ def create_review(
         If the role is read-only or the user already reviewed this room.
     """
     # ❗ no writes for auditor / service_account
-    if claims["role"] in ("auditor", "service_account"):
+    if claims["role"] in ("auditor", "moderator", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This role cannot create reviews",
@@ -256,8 +256,8 @@ def update_review(
     Access
     ------
     - Review owner.
-    - Admin or moderator.
-    - Auditor and service_account cannot modify reviews.
+    - Admin.
+    - Auditor, moderator, and service_account cannot modify reviews.
 
     Behavior
     --------
@@ -285,22 +285,26 @@ def update_review(
     HTTPException
         If the review does not exist or the user is not allowed.
     """
-    # ❗ no writes for auditor / service_account
-    if claims["role"] in ("auditor", "service_account"):
+
+    # ❗ no writes for auditor / moderator / service_account
+    if claims["role"] in ("auditor", "moderator", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This role cannot modify reviews",
         )
+
     review = get_review_or_404(db, review_id)
 
-    is_admin_or_mod = claims["role"] in ("admin", "moderator")
+    is_admin = claims["role"] == "admin"
     is_owner = review.user_id == claims["user_id"]
 
-    if not (is_admin_or_mod or is_owner):
+    # Only owner or admin can change rating/comment
+    if not (is_admin or is_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed to update this review",
         )
+
 
     if update_data.rating is not None:
         review.rating = update_data.rating
@@ -328,8 +332,8 @@ def delete_review(
     Access
     ------
     - Review owner.
-    - Admin or moderator.
-    - Auditor and service_account cannot delete reviews.
+    - Admin.
+    - Auditor, moderator, and service_account cannot delete reviews.
 
     Parameters
     ----------
@@ -349,8 +353,9 @@ def delete_review(
     HTTPException
         If the review does not exist or the user is not allowed.
     """
-    # ❗ no writes for auditor / service_account
-    if claims["role"] in ("auditor", "service_account"):
+
+    # ❗ no writes for auditor / moderator / service_account
+    if claims["role"] in ("auditor", "moderator", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This role cannot delete reviews",
@@ -358,14 +363,16 @@ def delete_review(
 
     review = get_review_or_404(db, review_id)
 
-    is_admin_or_mod = claims["role"] in ("admin", "moderator")
+    is_admin = claims["role"] == "admin"
     is_owner = review.user_id == claims["user_id"]
 
-    if not (is_admin_or_mod or is_owner):
+    # Only owner or admin can permanently delete
+    if not (is_admin or is_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed to delete this review",
         )
+
 
     db.delete(review)
     db.commit()

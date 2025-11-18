@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class RoomBase(BaseModel):
@@ -9,13 +9,10 @@ class RoomBase(BaseModel):
 
     Shared fields used when creating, reading, and updating rooms.
     """
-    name: str = Field(..., example="Conference Room A")
-    capacity: int = Field(..., ge=1, example=10)
-    equipment: Optional[str] = Field(
-        default=None,
-        example="projector,whiteboard,video-conference",
-    )
-    location: str = Field(..., example="Building A - Floor 3")
+    name: str = Field(...)
+    capacity: int = Field(..., ge=1)
+    equipment: Optional[str] = Field(default=None)
+    location: str = Field(...)
 
 
 class RoomCreate(RoomBase):
@@ -50,5 +47,4 @@ class RoomRead(RoomBase):
     is_active: bool
     is_out_of_service: bool
 
-    class Config:
-        from_attributes = True  # pydantic v2
+    model_config = ConfigDict(from_attributes=True)

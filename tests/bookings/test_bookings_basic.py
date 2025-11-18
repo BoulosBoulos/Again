@@ -148,7 +148,6 @@ def test_admin_can_list_all_bookings():
     assert len(all_bookings) >= 2
 
 
-
 def test_owner_can_cancel_own_booking():
     token_user1 = make_token(user_id=1, username="user1", role="regular")
     headers_user1 = {"Authorization": f"Bearer {token_user1}"}
@@ -169,6 +168,7 @@ def test_owner_can_cancel_own_booking():
     # overlapping booking should now be allowed (since previous is cancelled)
     res_new = client.post("/bookings", json=body, headers=headers_user1)
     assert res_new.status_code == 201
+
 
 def test_update_booking_enforces_conflicts():
     token = make_token(user_id=1, username="user1", role="regular")
@@ -228,6 +228,7 @@ def test_check_availability_endpoint():
             "start_time": (now + timedelta(hours=1, minutes=30)).isoformat(),
             "end_time": (now + timedelta(hours=1, minutes=45)).isoformat(),
         },
+        headers=headers,   # <-- availability requires auth
     )
     assert res_busy.status_code == 200
     busy_info = res_busy.json()
@@ -242,10 +243,51 @@ def test_check_availability_endpoint():
             "start_time": (now + timedelta(hours=3)).isoformat(),
             "end_time": (now + timedelta(hours=4)).isoformat(),
         },
+        headers=headers,   # <-- availability requires auth
     )
     assert res_free.status_code == 200
     free_info = res_free.json()
     assert free_info["available"] is True
+
+
+def test_availability_requires_auth_and_moderator_forbidden():
+    now = datetime.now(timezone.utc)
+
+    params = {
+        "room_id": 1,
+        "start_time": (now + timedelta(hours=1)).isoformat(),
+        "end_time": (now + timedelta(hours=2)).isoformat(),
+    }
+
+    # no token → 403 (HTTPBearer)
+    res_no_auth = client.get("/bookings/availability", params=params)
+    assert res_no_auth.status_code == 403
+
+    # moderator role is NOT in availability_roles → 403
+    mod_token = make_token(user_id=3, username="mod1", role="moderator")
+    headers_mod = {"Authorization": f"Bearer {mod_token}"}
+    res_mod = client.get("/bookings/availability", params=params, headers=headers_mod)
+    assert res_mod.status_code == 403
+
+
+def test_availability_invalid_time_range_returns_400():
+    token = make_token(user_id=1, username="user1", role="regular")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    now = datetime.now(timezone.utc)
+    # end <= start
+    res = client.get(
+        "/bookings/availability",
+        params={
+            "room_id": 1,
+            "start_time": (now + timedelta(hours=2)).isoformat(),
+            "end_time": (now + timedelta(hours=1)).isoformat(),
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "end_time must be after start_time" in res.json()["detail"]
+
 
 def test_auditor_cannot_create_or_modify_bookings():
     token_aud = make_token(user_id=10, username="aud1", role="auditor")
@@ -277,6 +319,7 @@ def test_auditor_cannot_create_or_modify_bookings():
     res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_aud)
     assert res_delete.status_code == 403
 
+
 def test_regular_user_cannot_modify_others_booking():
     now = datetime.now(timezone.utc)
 
@@ -306,6 +349,7 @@ def test_regular_user_cannot_modify_others_booking():
     res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_user2)
     assert res_delete.status_code == 403
 
+
 def test_admin_can_update_booking_status():
     now = datetime.now(timezone.utc)
 
@@ -332,6 +376,7 @@ def test_admin_can_update_booking_status():
     )
     assert res_update.status_code == 200
     assert res_update.json()["status"] == "cancelled"
+
 
 def test_create_booking_with_invalid_time_fails():
     token = make_token(user_id=1, username="user1", role="regular")

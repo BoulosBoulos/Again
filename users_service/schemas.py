@@ -1,33 +1,20 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 from .models import UserRole
 
 
-# ---------- Shared base ----------
-
-class UserBase(BaseModel):
+# ---------- Input schemas ----------
+class UserCreate(BaseModel):
     """
-    Base schema for user information.
-
-    Shared fields used for both input and output user representations.
+    Schema for user registration input.
+    Public registration does NOT accept role; it is assigned internally.
     """
     name: str
     username: str
     email: EmailStr
-    role: UserRole
-
-
-# ---------- Input schemas ----------
-
-class UserCreate(UserBase):
-    """
-    Schema for user registration input.
-
-    Extends UserBase with a plaintext password field.
-    """
     password: str
 
 
@@ -91,9 +78,7 @@ class UserRead(BaseModel):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True  # for SQLAlchemy models
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ---------- Token schemas ----------
 

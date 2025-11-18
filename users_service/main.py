@@ -32,7 +32,7 @@ BOOKINGS_SERVICE_URL = os.getenv(
 
 SERVICE_ACCOUNT_USERNAME = "users_service"
 SERVICE_ACCOUNT_USER_ID = 0        # "fake" ID for the service account
-SERVICE_ACCOUNT_ROLE = "auditor"   # allowed to call GET /bookings
+SERVICE_ACCOUNT_ROLE = "service_account"   # least-privilege
 
 def make_service_account_token() -> str:
     payload = {
@@ -266,7 +266,7 @@ def update_my_profile(
         If email already exists or role is read-only.
     """
     # block read-only / service accounts
-    if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT):
+    if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT, UserRole.MODERATOR):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Read-only users cannot modify profiles",
@@ -324,7 +324,7 @@ def delete_my_account(
         If user role is read-only.
     """
     # ❗ block read-only / service accounts
-    if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT):
+    if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT, UserRole.MODERATOR):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Read-only users cannot delete accounts",
@@ -565,11 +565,16 @@ def get_user_booking_history(
         If unauthorized or Bookings service errors.
     """
     # RBAC: only self OR admin/auditor
-    if current_user.role not in (UserRole.ADMIN, UserRole.AUDITOR) and current_user.id != user_id:
+    if current_user.role in (UserRole.ADMIN, UserRole.AUDITOR, UserRole.FACILITY_MANAGER):
+        pass  # can view any user
+    elif current_user.role == UserRole.REGULAR and current_user.id == user_id:
+        pass  # own history
+    else:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to view other users' booking history",
-        )
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not allowed to view booking history for this user",
+    )
+
 
     token = make_service_account_token()
     headers = {"Authorization": f"Bearer {token}"}
@@ -598,3 +603,62 @@ def get_user_booking_history(
         "user_id": user_id,
         "bookings": bookings,
     }
+
+@app.put("/users/{user_id}", response_model=schemas.UserRead)
+def admin_update_user(
+    user_id: int,
+    update_data: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(admin_only),
+):
+    """
+    Admin only: Update another user's profile information.
+
+    Editable fields:
+    - name
+    - email (must remain unique in the system)
+
+    Parameters
+    ----------
+    user_id : int
+        ID of the user to update.
+    update_data : UserUpdate
+        Fields to modify (name and/or email).
+    db : Session
+        Database session.
+
+    Returns
+    -------
+    UserRead
+        Updated user record.
+
+    Raises
+    ------
+    HTTPException
+        If user is not found or new email is already taken.
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if update_data.name is not None:
+        user.name = update_data.name
+
+    if update_data.email is not None and update_data.email != user.email:
+        email_owner = (
+            db.query(models.User)
+            .filter(models.User.email == update_data.email)
+            .first()
+        )
+        if email_owner and email_owner.id != user.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Email already in use",
+            )
+        user.email = update_data.email
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
