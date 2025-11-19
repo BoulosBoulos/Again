@@ -1,9 +1,9 @@
-version: "3.9"
+﻿version: "3.9"
 
 services:
   db:
     image: postgres:16
-    container_name: smartmeetingroom-db
+    container_name: smart_db
     environment:
       POSTGRES_USER: smart_user
       POSTGRES_PASSWORD: smart_password
@@ -11,7 +11,57 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
+
+  users_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.users
+    container_name: users_service
+    environment:
+      DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  bookings_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.bookings
+    container_name: bookings_service
+    environment:
+      DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+    depends_on:
+      - db
+    ports:
+      - "8002:8002"
+
+  rooms_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.rooms
+    container_name: rooms_service
+    environment:
+      DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+      BOOKINGS_SERVICE_URL: http://bookings_service:8002
+    depends_on:
+      - db
+      - bookings_service
+    ports:
+      - "8001:8001"
+
+  reviews_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.reviews
+    container_name: reviews_service
+    environment:
+      DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+    depends_on:
+      - db
+    ports:
+      - "8003:8003"
 
 volumes:
-  postgres_data:
+  db_data:

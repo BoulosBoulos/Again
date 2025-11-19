@@ -34,38 +34,22 @@
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">EmailStr</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">EmailStr</span><span class="p">,</span> <span class="n">ConfigDict</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserRole</span>
 
 
-<span class="c1"># ---------- Shared base ----------</span>
-
-<div class="viewcode-block" id="UserBase">
-<a class="viewcode-back" href="../../users_service.html#users_service.schemas.UserBase">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">UserBase</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="c1"># ---------- Input schemas ----------</span>
+<div class="viewcode-block" id="UserCreate">
+<a class="viewcode-back" href="../../users_service.html#users_service.schemas.UserCreate">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UserCreate</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Base schema for user information.</span>
-
-<span class="sd">    Shared fields used for both input and output user representations.</span>
+<span class="sd">    Schema for user registration input.</span>
+<span class="sd">    Public registration does NOT accept role; it is assigned internally.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">username</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">email</span><span class="p">:</span> <span class="n">EmailStr</span>
-    <span class="n">role</span><span class="p">:</span> <span class="n">UserRole</span></div>
-
-
-
-<span class="c1"># ---------- Input schemas ----------</span>
-
-<div class="viewcode-block" id="UserCreate">
-<a class="viewcode-back" href="../../users_service.html#users_service.schemas.UserCreate">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">UserCreate</span><span class="p">(</span><span class="n">UserBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Schema for user registration input.</span>
-
-<span class="sd">    Extends UserBase with a plaintext password field.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">password</span><span class="p">:</span> <span class="nb">str</span></div>
 
 
@@ -144,12 +128,7 @@
     <span class="n">is_active</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">created_at</span><span class="p">:</span> <span class="n">datetime</span>
 
-<div class="viewcode-block" id="UserRead.Config">
-<a class="viewcode-back" href="../../users_service.html#users_service.schemas.UserRead.Config">[docs]</a>
-    <span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">:</span>
-        <span class="n">from_attributes</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># for SQLAlchemy models</span></div>
-</div>
-
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">from_attributes</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
 
 
 <span class="c1"># ---------- Token schemas ----------</span>

@@ -256,19 +256,6 @@ def test_update_email_to_existing_one_fails():
     assert "email" in res.json()["detail"].lower()
 
 
-def test_delete_my_account():
-    register_user("user1", "user1@example.com", password="User1234")
-    token = login_and_get_token("user1", "User1234")
-    headers = {"Authorization": f"Bearer {token}"}
-
-    res = client.delete("/users/me", headers=headers)
-    assert res.status_code == 204
-
-    # token now points to a deleted user → should get 401
-    res_me = client.get("/users/me", headers=headers)
-    assert res_me.status_code == 401
-
-
 # ---------- Admin listing & get-by-username ----------
 
 

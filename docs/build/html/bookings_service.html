@@ -45,8 +45,8 @@ booking history queries.</p>
 <h2>Access<a class="headerlink" href="#access" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Owner of the booking.</p></li>
-<li><p>Admin or facility_manager for any booking.</p></li>
-<li><p>Auditor and service_account cannot cancel bookings.</p></li>
+<li><p>Admin for any booking.</p></li>
+<li><p>Auditor, moderator, and service_account cannot cancel bookings.</p></li>
 </ul>
 </section>
 <section id="behavior">
@@ -86,44 +86,67 @@ booking history queries.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="bookings_service.main.check_availability">
-<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">check_availability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">room_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time:</span> <span class="pre">~datetime.datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time:</span> <span class="pre">~datetime.datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#check_availability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.check_availability" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">check_availability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">room_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time:</span> <span class="pre">~datetime.datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time:</span> <span class="pre">~datetime.datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">require_roles.&lt;locals&gt;.dependency&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#check_availability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.check_availability" title="Link to this definition">¶</a></dt>
 <dd><p>Check if a room is available during a given time range.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>room_id</strong> (<em>int</em>) – Room to check.</p></li>
-<li><p><strong>start_time</strong> (<em>datetime</em>) – Start of the desired interval (ISO 8601).</p></li>
-<li><p><strong>end_time</strong> (<em>datetime</em>) – End of the desired interval (ISO 8601).</p></li>
-<li><p><strong>db</strong> (<em>Session</em>) – Database session.</p></li>
+<section id="id1">
+<h2>Access<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Allowed roles: admin, regular, facility_manager, auditor, service_account.</p></li>
+<li><p>Moderator is not allowed to call this endpoint.</p></li>
 </ul>
+<dl class="field-list simple">
+<dt class="field-odd">param room_id<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Room to check.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>JSON object with:
+<dt class="field-even">type room_id<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">param start_time<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Start of the desired interval (ISO 8601).</p>
+</dd>
+<dt class="field-even">type start_time<span class="colon">:</span></dt>
+<dd class="field-even"><p>datetime</p>
+</dd>
+<dt class="field-odd">param end_time<span class="colon">:</span></dt>
+<dd class="field-odd"><p>End of the desired interval (ISO 8601).</p>
+</dd>
+<dt class="field-even">type end_time<span class="colon">:</span></dt>
+<dd class="field-even"><p>datetime</p>
+</dd>
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>JSON object with:
 - ‘room_id’ : int
 - ‘available’ : bool</p>
 </dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict</p>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
 </dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>HTTPException</strong> – If the time range is invalid.</p>
+<dt class="field-odd">raises HTTPException<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If the time range is invalid.</p>
 </dd>
 </dl>
+</section>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="bookings_service.main.create_booking">
 <span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">create_booking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">booking_in:</span> <span class="pre">~bookings_service.schemas.BookingCreate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#create_booking"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.create_booking" title="Link to this definition">¶</a></dt>
 <dd><p>Create a new booking for the authenticated user.</p>
-<section id="id1">
-<h2>Access<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<section id="id2">
+<h2>Access<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Denied for roles: auditor, service_account.</p></li>
-<li><p>Allowed for: regular, admin, facility_manager, moderator.</p></li>
+<li><p>Allowed for: regular, admin, facility_manager.</p></li>
+<li><p>Denied for roles: auditor, moderator, service_account.</p></li>
 </ul>
 </section>
-<section id="id2">
-<h2>Behavior<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<section id="id3">
+<h2>Behavior<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Validates that the time range is correct.</p></li>
 <li><p>Rejects bookings that overlap with existing non-cancelled bookings.</p></li>
@@ -155,7 +178,7 @@ booking history queries.</p>
 <dd class="field-even"><p>BookingRead</p>
 </dd>
 <dt class="field-odd">raises HTTPException<span class="colon">:</span></dt>
-<dd class="field-odd"><p>If the user role is read-only, the time range is invalid,
+<dd class="field-odd"><p>If the user role is not allowed, the time range is invalid,
     or the room is already booked.</p>
 </dd>
 </dl>
@@ -209,11 +232,11 @@ booking history queries.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="bookings_service.main.list_all_bookings">
 <span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">list_all_bookings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">room_id:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">Query(None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user_id:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">Query(None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">require_roles.&lt;locals&gt;.dependency&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#list_all_bookings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.list_all_bookings" title="Link to this definition">¶</a></dt>
-<dd><p>Admin/Facility/Auditor: view all bookings with optional filters.</p>
-<section id="id3">
-<h2>Access<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
+<dd><p>Admin/Facility/Auditor/Service Account: view all bookings with optional filters.</p>
+<section id="id4">
+<h2>Access<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Allowed roles: admin, facility_manager, auditor.</p></li>
+<li><p>Allowed roles: admin, facility_manager, auditor, service_account.</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">param room_id<span class="colon">:</span></dt>
@@ -248,20 +271,33 @@ booking history queries.</p>
 <dt class="sig sig-object py" id="bookings_service.main.list_my_bookings">
 <span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">list_my_bookings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#list_my_bookings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.list_my_bookings" title="Link to this definition">¶</a></dt>
 <dd><p>List bookings that belong to the authenticated user.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>db</strong> (<em>Session</em>) – Database session.</p></li>
-<li><p><strong>claims</strong> (<em>Dict</em>) – Decoded JWT claims containing the current user’s ID.</p></li>
+<section id="id5">
+<h2>Access<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Allowed for: admin, facility_manager, regular.</p></li>
+<li><p>Denied for: auditor, moderator, service_account.</p></li>
 </ul>
+<dl class="field-list simple">
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Bookings for the current user, ordered by start_time descending.</p>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
 </dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>List[<a class="reference internal" href="#bookings_service.schemas.BookingRead" title="bookings_service.schemas.BookingRead">BookingRead</a>]</p>
+<dt class="field-odd">param claims<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Decoded JWT claims containing the current user’s ID.</p>
+</dd>
+<dt class="field-even">type claims<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Bookings for the current user, ordered by start_time descending.</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[BookingRead]</p>
 </dd>
 </dl>
+</section>
 </dd></dl>
 
 <dl class="py function">
@@ -282,16 +318,16 @@ booking history queries.</p>
 <dt class="sig sig-object py" id="bookings_service.main.update_booking">
 <span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">update_booking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">booking_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_data:</span> <span class="pre">~bookings_service.schemas.BookingUpdate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#update_booking"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.update_booking" title="Link to this definition">¶</a></dt>
 <dd><p>Update an existing booking’s room, time, or status.</p>
-<section id="id4">
-<h2>Access<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h2>
+<section id="id6">
+<h2>Access<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Owner of the booking.</p></li>
-<li><p>Admin or facility_manager for any booking.</p></li>
-<li><p>Auditor and service_account cannot modify bookings.</p></li>
+<li><p>Admin for any booking.</p></li>
+<li><p>Auditor, moderator, and service_account cannot modify bookings.</p></li>
 </ul>
 </section>
-<section id="id5">
-<h2>Behavior<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h2>
+<section id="id7">
+<h2>Behavior<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Applies only the fields provided in BookingUpdate.</p></li>
 <li><p>Re-validates the final time range.</p></li>
@@ -427,33 +463,33 @@ booking history queries.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id6">
-<span class="sig-name descname"><span class="pre">end_time</span></span><a class="headerlink" href="#id6" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="id7">
-<span class="sig-name descname"><span class="pre">id</span></span><a class="headerlink" href="#id7" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="id8">
-<span class="sig-name descname"><span class="pre">room_id</span></span><a class="headerlink" href="#id8" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">end_time</span></span><a class="headerlink" href="#id8" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="id9">
-<span class="sig-name descname"><span class="pre">start_time</span></span><a class="headerlink" href="#id9" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">id</span></span><a class="headerlink" href="#id9" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="id10">
-<span class="sig-name descname"><span class="pre">status</span></span><a class="headerlink" href="#id10" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">room_id</span></span><a class="headerlink" href="#id10" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="id11">
-<span class="sig-name descname"><span class="pre">user_id</span></span><a class="headerlink" href="#id11" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">start_time</span></span><a class="headerlink" href="#id11" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id12">
+<span class="sig-name descname"><span class="pre">status</span></span><a class="headerlink" href="#id12" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id13">
+<span class="sig-name descname"><span class="pre">user_id</span></span><a class="headerlink" href="#id13" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -543,17 +579,6 @@ booking history queries.</p>
 <dd><p>Bases: <a class="reference internal" href="#bookings_service.schemas.BookingBase" title="bookings_service.schemas.BookingBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">BookingBase</span></code></a></p>
 <p>Schema returned when reading booking information.</p>
 <p>Extends BookingBase with identifiers, status, and creation timestamp.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.Config">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Config</span></span><a class="reference internal" href="_modules/bookings_service/schemas.html#BookingRead.Config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.schemas.BookingRead.Config" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.Config.from_attributes">
-<span class="sig-name descname"><span class="pre">from_attributes</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.Config.from_attributes" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
 <dl class="py attribute">
 <dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.created_at">
 <span class="sig-name descname"><span class="pre">created_at</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.created_at" title="Link to this definition">¶</a></dt>

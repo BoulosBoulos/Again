@@ -119,8 +119,8 @@
 
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
-<span class="sd">    - Denied for roles: auditor, service_account.</span>
-<span class="sd">    - Allowed for: regular, admin, facility_manager, moderator.</span>
+<span class="sd">    - Denied for roles: auditor, moderator, service_account.</span>
+<span class="sd">    - Allowed for: regular, admin, facility_manager.</span>
 
 <span class="sd">    Behavior</span>
 <span class="sd">    --------</span>
@@ -148,7 +148,7 @@
 <span class="sd">        If the role is read-only or the user already reviewed this room.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># ❗ no writes for auditor / service_account</span>
-    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot create reviews&quot;</span><span class="p">,</span>
@@ -306,8 +306,8 @@
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
 <span class="sd">    - Review owner.</span>
-<span class="sd">    - Admin or moderator.</span>
-<span class="sd">    - Auditor and service_account cannot modify reviews.</span>
+<span class="sd">    - Admin.</span>
+<span class="sd">    - Auditor, moderator, and service_account cannot modify reviews.</span>
 
 <span class="sd">    Behavior</span>
 <span class="sd">    --------</span>
@@ -335,22 +335,26 @@
 <span class="sd">    HTTPException</span>
 <span class="sd">        If the review does not exist or the user is not allowed.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># ❗ no writes for auditor / service_account</span>
-    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+
+    <span class="c1"># ❗ no writes for auditor / moderator / service_account</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot modify reviews&quot;</span><span class="p">,</span>
         <span class="p">)</span>
+
     <span class="n">review</span> <span class="o">=</span> <span class="n">get_review_or_404</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">review_id</span><span class="p">)</span>
 
-    <span class="n">is_admin_or_mod</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">)</span>
+    <span class="n">is_admin</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;admin&quot;</span>
     <span class="n">is_owner</span> <span class="o">=</span> <span class="n">review</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin_or_mod</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
+    <span class="c1"># Only owner or admin can change rating/comment</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to update this review&quot;</span><span class="p">,</span>
         <span class="p">)</span>
+
 
     <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">rating</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">review</span><span class="o">.</span><span class="n">rating</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">rating</span>
@@ -381,8 +385,8 @@
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
 <span class="sd">    - Review owner.</span>
-<span class="sd">    - Admin or moderator.</span>
-<span class="sd">    - Auditor and service_account cannot delete reviews.</span>
+<span class="sd">    - Admin.</span>
+<span class="sd">    - Auditor, moderator, and service_account cannot delete reviews.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -402,8 +406,9 @@
 <span class="sd">    HTTPException</span>
 <span class="sd">        If the review does not exist or the user is not allowed.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># ❗ no writes for auditor / service_account</span>
-    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+
+    <span class="c1"># ❗ no writes for auditor / moderator / service_account</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot delete reviews&quot;</span><span class="p">,</span>
@@ -411,14 +416,16 @@
 
     <span class="n">review</span> <span class="o">=</span> <span class="n">get_review_or_404</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">review_id</span><span class="p">)</span>
 
-    <span class="n">is_admin_or_mod</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">)</span>
+    <span class="n">is_admin</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;admin&quot;</span>
     <span class="n">is_owner</span> <span class="o">=</span> <span class="n">review</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin_or_mod</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
+    <span class="c1"># Only owner or admin can permanently delete</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to delete this review&quot;</span><span class="p">,</span>
         <span class="p">)</span>
+
 
     <span class="n">db</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">review</span><span class="p">)</span>
     <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>

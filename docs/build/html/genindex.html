@@ -63,6 +63,8 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="users_service.html#users_service.main.admin_update_user">admin_update_user() (in module users_service.main)</a>
+</li>
       <li><a href="users_service.html#users_service.models.UserRole.AUDITOR">AUDITOR (users_service.models.UserRole attribute)</a>
 </li>
       <li><a href="users_service.html#users_service.auth.authenticate_user">authenticate_user() (in module users_service.auth)</a>
@@ -80,8 +82,6 @@
       <li><a href="bookings_service.html#bookings_service.schemas.BookingCreate">BookingCreate (class in bookings_service.schemas)</a>
 </li>
       <li><a href="bookings_service.html#bookings_service.schemas.BookingRead">BookingRead (class in bookings_service.schemas)</a>
-</li>
-      <li><a href="bookings_service.html#bookings_service.schemas.BookingRead.Config">BookingRead.Config (class in bookings_service.schemas)</a>
 </li>
       <li>
     bookings_service.auth
@@ -207,14 +207,14 @@
       <li><a href="users_service.html#id1">email (users_service.models.User attribute)</a>, <a href="users_service.html#users_service.models.User.email">[1]</a>
 
       <ul>
-        <li><a href="users_service.html#users_service.schemas.UserBase.email">(users_service.schemas.UserBase attribute)</a>
+        <li><a href="users_service.html#users_service.schemas.UserCreate.email">(users_service.schemas.UserCreate attribute)</a>
 </li>
         <li><a href="users_service.html#users_service.schemas.UserRead.email">(users_service.schemas.UserRead attribute)</a>
 </li>
         <li><a href="users_service.html#users_service.schemas.UserUpdate.email">(users_service.schemas.UserUpdate attribute)</a>
 </li>
       </ul></li>
-      <li><a href="bookings_service.html#bookings_service.models.Booking.end_time">end_time (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id6">[1]</a>
+      <li><a href="bookings_service.html#bookings_service.models.Booking.end_time">end_time (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id8">[1]</a>
 
       <ul>
         <li><a href="bookings_service.html#bookings_service.schemas.BookingBase.end_time">(bookings_service.schemas.BookingBase attribute)</a>
@@ -242,18 +242,10 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="users_service.html#users_service.models.UserRole.FACILITY_MANAGER">FACILITY_MANAGER (users_service.models.UserRole attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reviews_service.html#reviews_service.main.flag_review">flag_review() (in module reviews_service.main)</a>
 </li>
-      <li><a href="bookings_service.html#bookings_service.schemas.BookingRead.Config.from_attributes">from_attributes (bookings_service.schemas.BookingRead.Config attribute)</a>
-
-      <ul>
-        <li><a href="reviews_service.html#reviews_service.schemas.ReviewRead.Config.from_attributes">(reviews_service.schemas.ReviewRead.Config attribute)</a>
-</li>
-        <li><a href="rooms_service.html#rooms_service.schemas.RoomRead.Config.from_attributes">(rooms_service.schemas.RoomRead.Config attribute)</a>
-</li>
-        <li><a href="users_service.html#users_service.schemas.UserRead.Config.from_attributes">(users_service.schemas.UserRead.Config attribute)</a>
-</li>
-      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -316,7 +308,7 @@
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="bookings_service.html#bookings_service.models.Booking.id">id (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id7">[1]</a>
+      <li><a href="bookings_service.html#bookings_service.models.Booking.id">id (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id9">[1]</a>
 
       <ul>
         <li><a href="bookings_service.html#bookings_service.schemas.BookingRead.id">(bookings_service.schemas.BookingRead attribute)</a>
@@ -402,8 +394,12 @@
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="users_service.html#users_service.main.make_service_account_token">make_service_account_token() (in module users_service.main)</a>
+      <li><a href="rooms_service.html#rooms_service.main.make_service_account_token">make_service_account_token() (in module rooms_service.main)</a>
+
+      <ul>
+        <li><a href="users_service.html#users_service.main.make_service_account_token">(in module users_service.main)</a>
 </li>
+      </ul></li>
       <li><a href="bookings_service.html#bookings_service.schemas.BookingBase.model_config">model_config (bookings_service.schemas.BookingBase attribute)</a>
 
       <ul>
@@ -434,8 +430,6 @@
         <li><a href="users_service.html#users_service.schemas.Token.model_config">(users_service.schemas.Token attribute)</a>
 </li>
         <li><a href="users_service.html#users_service.schemas.TokenData.model_config">(users_service.schemas.TokenData attribute)</a>
-</li>
-        <li><a href="users_service.html#users_service.schemas.UserBase.model_config">(users_service.schemas.UserBase attribute)</a>
 </li>
         <li><a href="users_service.html#users_service.schemas.UserCreate.model_config">(users_service.schemas.UserCreate attribute)</a>
 </li>
@@ -512,7 +506,7 @@
 </li>
         <li><a href="users_service.html#id5">(users_service.models.User attribute)</a>, <a href="users_service.html#users_service.models.User.name">[1]</a>
 </li>
-        <li><a href="users_service.html#users_service.schemas.UserBase.name">(users_service.schemas.UserBase attribute)</a>
+        <li><a href="users_service.html#users_service.schemas.UserCreate.name">(users_service.schemas.UserCreate attribute)</a>
 </li>
         <li><a href="users_service.html#users_service.schemas.UserRead.name">(users_service.schemas.UserRead attribute)</a>
 </li>
@@ -579,8 +573,6 @@
 </li>
       <li><a href="reviews_service.html#reviews_service.schemas.ReviewRead">ReviewRead (class in reviews_service.schemas)</a>
 </li>
-      <li><a href="reviews_service.html#reviews_service.schemas.ReviewRead.Config">ReviewRead.Config (class in reviews_service.schemas)</a>
-</li>
       <li>
     reviews_service.auth
 
@@ -623,8 +615,6 @@
       <ul>
         <li><a href="users_service.html#id11">(users_service.schemas.TokenData attribute)</a>, <a href="users_service.html#users_service.schemas.TokenData.role">[1]</a>
 </li>
-        <li><a href="users_service.html#users_service.schemas.UserBase.role">(users_service.schemas.UserBase attribute)</a>
-</li>
         <li><a href="users_service.html#users_service.schemas.UserRead.role">(users_service.schemas.UserRead attribute)</a>
 </li>
         <li><a href="users_service.html#users_service.schemas.UserRoleUpdate.role">(users_service.schemas.UserRoleUpdate attribute)</a>
@@ -634,7 +624,7 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="rooms_service.html#rooms_service.models.Room">Room (class in rooms_service.models)</a>
 </li>
-      <li><a href="bookings_service.html#bookings_service.models.Booking.room_id">room_id (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id8">[1]</a>
+      <li><a href="bookings_service.html#bookings_service.models.Booking.room_id">room_id (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id10">[1]</a>
 
       <ul>
         <li><a href="bookings_service.html#bookings_service.schemas.BookingBase.room_id">(bookings_service.schemas.BookingBase attribute)</a>
@@ -653,8 +643,6 @@
       <li><a href="rooms_service.html#rooms_service.schemas.RoomCreate">RoomCreate (class in rooms_service.schemas)</a>
 </li>
       <li><a href="rooms_service.html#rooms_service.schemas.RoomRead">RoomRead (class in rooms_service.schemas)</a>
-</li>
-      <li><a href="rooms_service.html#rooms_service.schemas.RoomRead.Config">RoomRead.Config (class in rooms_service.schemas)</a>
 </li>
       <li>
     rooms_service.auth
@@ -711,7 +699,7 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="users_service.html#users_service.models.UserRole.SERVICE_ACCOUNT">SERVICE_ACCOUNT (users_service.models.UserRole attribute)</a>
 </li>
-      <li><a href="bookings_service.html#bookings_service.models.Booking.start_time">start_time (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id9">[1]</a>
+      <li><a href="bookings_service.html#bookings_service.models.Booking.start_time">start_time (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id11">[1]</a>
 
       <ul>
         <li><a href="bookings_service.html#bookings_service.schemas.BookingBase.start_time">(bookings_service.schemas.BookingBase attribute)</a>
@@ -721,7 +709,7 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="bookings_service.html#bookings_service.models.Booking.status">status (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id10">[1]</a>
+      <li><a href="bookings_service.html#bookings_service.models.Booking.status">status (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id12">[1]</a>
 
       <ul>
         <li><a href="bookings_service.html#bookings_service.schemas.BookingRead.status">(bookings_service.schemas.BookingRead attribute)</a>
@@ -769,7 +757,7 @@
 </li>
       <li><a href="users_service.html#users_service.models.User">User (class in users_service.models)</a>
 </li>
-      <li><a href="bookings_service.html#bookings_service.models.Booking.user_id">user_id (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id11">[1]</a>
+      <li><a href="bookings_service.html#bookings_service.models.Booking.user_id">user_id (bookings_service.models.Booking attribute)</a>, <a href="bookings_service.html#id13">[1]</a>
 
       <ul>
         <li><a href="bookings_service.html#bookings_service.schemas.BookingRead.user_id">(bookings_service.schemas.BookingRead attribute)</a>
@@ -781,8 +769,6 @@
         <li><a href="users_service.html#id12">(users_service.schemas.TokenData attribute)</a>, <a href="users_service.html#users_service.schemas.TokenData.user_id">[1]</a>
 </li>
       </ul></li>
-      <li><a href="users_service.html#users_service.schemas.UserBase">UserBase (class in users_service.schemas)</a>
-</li>
       <li><a href="users_service.html#users_service.schemas.UserCreate">UserCreate (class in users_service.schemas)</a>
 </li>
       <li><a href="users_service.html#users_service.schemas.UserLogin">UserLogin (class in users_service.schemas)</a>
@@ -790,7 +776,7 @@
       <li><a href="users_service.html#id7">username (users_service.models.User attribute)</a>, <a href="users_service.html#users_service.models.User.username">[1]</a>
 
       <ul>
-        <li><a href="users_service.html#users_service.schemas.UserBase.username">(users_service.schemas.UserBase attribute)</a>
+        <li><a href="users_service.html#users_service.schemas.UserCreate.username">(users_service.schemas.UserCreate attribute)</a>
 </li>
         <li><a href="users_service.html#id14">(users_service.schemas.UserLogin attribute)</a>, <a href="users_service.html#users_service.schemas.UserLogin.username">[1]</a>
 </li>
@@ -800,8 +786,6 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="users_service.html#users_service.schemas.UserRead">UserRead (class in users_service.schemas)</a>
-</li>
-      <li><a href="users_service.html#users_service.schemas.UserRead.Config">UserRead.Config (class in users_service.schemas)</a>
 </li>
       <li><a href="users_service.html#users_service.models.UserRole">UserRole (class in users_service.models)</a>
 </li>

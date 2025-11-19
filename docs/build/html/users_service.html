@@ -38,6 +38,33 @@
 <p>This section documents the Users microservice: authentication, user management,
 roles, and booking-history delegation to the Bookings service.</p>
 <dl class="py function" id="module-users_service.main">
+<dt class="sig sig-object py" id="users_service.main.admin_update_user">
+<span class="sig-prename descclassname"><span class="pre">users_service.main.</span></span><span class="sig-name descname"><span class="pre">admin_update_user</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_data:</span> <span class="pre">~users_service.schemas.UserUpdate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_:</span> <span class="pre">~users_service.models.User</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">require_roles.&lt;locals&gt;.dependency&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/users_service/main.html#admin_update_user"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#users_service.main.admin_update_user" title="Link to this definition">¶</a></dt>
+<dd><p>Admin only: Update another user’s profile information.</p>
+<p>Editable fields:
+- name
+- email (must remain unique in the system)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>user_id</strong> (<em>int</em>) – ID of the user to update.</p></li>
+<li><p><strong>update_data</strong> (<a class="reference internal" href="#users_service.schemas.UserUpdate" title="users_service.schemas.UserUpdate"><em>UserUpdate</em></a>) – Fields to modify (name and/or email).</p></li>
+<li><p><strong>db</strong> (<em>Session</em>) – Database session.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Updated user record.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#users_service.schemas.UserRead" title="users_service.schemas.UserRead">UserRead</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>HTTPException</strong> – If user is not found or new email is already taken.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="users_service.main.change_user_role">
 <span class="sig-prename descclassname"><span class="pre">users_service.main.</span></span><span class="sig-name descname"><span class="pre">change_user_role</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">role_update:</span> <span class="pre">~users_service.schemas.UserRoleUpdate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_:</span> <span class="pre">~users_service.models.User</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">require_roles.&lt;locals&gt;.dependency&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/users_service/main.html#change_user_role"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#users_service.main.change_user_role" title="Link to this definition">¶</a></dt>
 <dd><p>Admin only: Update a user’s role.</p>
@@ -68,7 +95,8 @@ roles, and booking-history delegation to the Bookings service.</p>
 <section id="restrictions">
 <h2>Restrictions<a class="headerlink" href="#restrictions" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>AUDITOR and SERVICE_ACCOUNT roles cannot delete accounts.</p></li>
+<li><p>AUDITOR, MODERATOR and SERVICE_ACCOUNT roles cannot delete accounts.</p></li>
+<li><p>The last active ADMIN cannot delete their own account.</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">param db<span class="colon">:</span></dt>
@@ -87,7 +115,10 @@ roles, and booking-history delegation to the Bookings service.</p>
 <dd class="field-odd"><p>None</p>
 </dd>
 <dt class="field-even">raises HTTPException<span class="colon">:</span></dt>
-<dd class="field-even"><p>If user role is read-only.</p>
+<dd class="field-even"><ul class="simple">
+<li><p>403: If user role is read-only (AUDITOR, MODERATOR, SERVICE_ACCOUNT).
+    - 400: If attempting to delete the last active admin user.</p></li>
+</ul>
 </dd>
 </dl>
 </section>
@@ -662,45 +693,16 @@ such as username, hashed password, and role.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="users_service.schemas.UserBase">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">users_service.schemas.</span></span><span class="sig-name descname"><span class="pre">UserBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EmailStr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#users_service.models.UserRole" title="users_service.models.UserRole"><span class="pre">UserRole</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/users_service/schemas.html#UserBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#users_service.schemas.UserBase" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
-<p>Base schema for user information.</p>
-<p>Shared fields used for both input and output user representations.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="users_service.schemas.UserBase.email">
-<span class="sig-name descname"><span class="pre">email</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">EmailStr</span></em><a class="headerlink" href="#users_service.schemas.UserBase.email" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="users_service.schemas.UserBase.model_config">
-<span class="sig-name descname"><span class="pre">model_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></em><a class="headerlink" href="#users_service.schemas.UserBase.model_config" title="Link to this definition">¶</a></dt>
-<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="users_service.schemas.UserBase.name">
-<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#users_service.schemas.UserBase.name" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="users_service.schemas.UserBase.role">
-<span class="sig-name descname"><span class="pre">role</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#users_service.models.UserRole" title="users_service.models.UserRole"><span class="pre">UserRole</span></a></em><a class="headerlink" href="#users_service.schemas.UserBase.role" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="users_service.schemas.UserBase.username">
-<span class="sig-name descname"><span class="pre">username</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#users_service.schemas.UserBase.username" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="users_service.schemas.UserCreate">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">users_service.schemas.</span></span><span class="sig-name descname"><span class="pre">UserCreate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EmailStr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#users_service.models.UserRole" title="users_service.models.UserRole"><span class="pre">UserRole</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/users_service/schemas.html#UserCreate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#users_service.schemas.UserCreate" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#users_service.schemas.UserBase" title="users_service.schemas.UserBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserBase</span></code></a></p>
-<p>Schema for user registration input.</p>
-<p>Extends UserBase with a plaintext password field.</p>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">users_service.schemas.</span></span><span class="sig-name descname"><span class="pre">UserCreate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EmailStr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/users_service/schemas.html#UserCreate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#users_service.schemas.UserCreate" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Schema for user registration input.
+Public registration does NOT accept role; it is assigned internally.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="users_service.schemas.UserCreate.email">
+<span class="sig-name descname"><span class="pre">email</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">EmailStr</span></em><a class="headerlink" href="#users_service.schemas.UserCreate.email" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="users_service.schemas.UserCreate.model_config">
 <span class="sig-name descname"><span class="pre">model_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></em><a class="headerlink" href="#users_service.schemas.UserCreate.model_config" title="Link to this definition">¶</a></dt>
@@ -708,8 +710,18 @@ such as username, hashed password, and role.</p>
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="users_service.schemas.UserCreate.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#users_service.schemas.UserCreate.name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="users_service.schemas.UserCreate.password">
 <span class="sig-name descname"><span class="pre">password</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#users_service.schemas.UserCreate.password" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="users_service.schemas.UserCreate.username">
+<span class="sig-name descname"><span class="pre">username</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#users_service.schemas.UserCreate.username" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -765,17 +777,6 @@ such as username, hashed password, and role.</p>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
 <p>Schema returned when reading user information.</p>
 <p>Exposes safe, non-sensitive fields and hides the password hash.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="users_service.schemas.UserRead.Config">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Config</span></span><a class="reference internal" href="_modules/users_service/schemas.html#UserRead.Config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#users_service.schemas.UserRead.Config" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="users_service.schemas.UserRead.Config.from_attributes">
-<span class="sig-name descname"><span class="pre">from_attributes</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#users_service.schemas.UserRead.Config.from_attributes" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
 <dl class="py attribute">
 <dt class="sig sig-object py" id="users_service.schemas.UserRead.created_at">
 <span class="sig-name descname"><span class="pre">created_at</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span></em><a class="headerlink" href="#users_service.schemas.UserRead.created_at" title="Link to this definition">¶</a></dt>
@@ -1066,6 +1067,7 @@ and raises HTTP 403 if not permitted.</p>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Users Service API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#users_service.main.admin_update_user"><code class="docutils literal notranslate"><span class="pre">admin_update_user()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#users_service.main.change_user_role"><code class="docutils literal notranslate"><span class="pre">change_user_role()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#users_service.main.delete_my_account"><code class="docutils literal notranslate"><span class="pre">delete_my_account()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#users_service.main.delete_user_admin"><code class="docutils literal notranslate"><span class="pre">delete_user_admin()</span></code></a></li>

@@ -65,7 +65,7 @@
 
 <span class="n">SERVICE_ACCOUNT_USERNAME</span> <span class="o">=</span> <span class="s2">&quot;users_service&quot;</span>
 <span class="n">SERVICE_ACCOUNT_USER_ID</span> <span class="o">=</span> <span class="mi">0</span>        <span class="c1"># &quot;fake&quot; ID for the service account</span>
-<span class="n">SERVICE_ACCOUNT_ROLE</span> <span class="o">=</span> <span class="s2">&quot;auditor&quot;</span>   <span class="c1"># allowed to call GET /bookings</span>
+<span class="n">SERVICE_ACCOUNT_ROLE</span> <span class="o">=</span> <span class="s2">&quot;service_account&quot;</span>   <span class="c1"># least-privilege</span>
 
 <div class="viewcode-block" id="make_service_account_token">
 <a class="viewcode-back" href="../../users_service.html#users_service.main.make_service_account_token">[docs]</a>
@@ -319,7 +319,7 @@
 <span class="sd">        If email already exists or role is read-only.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># block read-only / service accounts</span>
-    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">SERVICE_ACCOUNT</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">SERVICE_ACCOUNT</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">MODERATOR</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Read-only users cannot modify profiles&quot;</span><span class="p">,</span>
@@ -361,7 +361,8 @@
 
 <span class="sd">    Restrictions</span>
 <span class="sd">    -----------</span>
-<span class="sd">    - AUDITOR and SERVICE_ACCOUNT roles cannot delete accounts.</span>
+<span class="sd">    - AUDITOR, MODERATOR and SERVICE_ACCOUNT roles cannot delete accounts.</span>
+<span class="sd">    - The last active ADMIN cannot delete their own account.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -377,19 +378,43 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    HTTPException</span>
-<span class="sd">        If user role is read-only.</span>
+<span class="sd">        - 403: If user role is read-only (AUDITOR, MODERATOR, SERVICE_ACCOUNT).</span>
+<span class="sd">        - 400: If attempting to delete the last active admin user.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    
     <span class="c1"># ❗ block read-only / service accounts</span>
-    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">SERVICE_ACCOUNT</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span>
+        <span class="n">UserRole</span><span class="o">.</span><span class="n">SERVICE_ACCOUNT</span><span class="p">,</span>
+        <span class="n">UserRole</span><span class="o">.</span><span class="n">MODERATOR</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Read-only users cannot delete accounts&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
+    <span class="c1"># ❗ do not allow deleting the last admin</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="o">==</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">:</span>
+        <span class="n">other_admins_count</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">role</span> <span class="o">==</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">,</span>
+                <span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="c1"># if you have is_active, keep this; otherwise remove this line:</span>
+                <span class="c1"># models.User.is_active.is_(True),</span>
+            <span class="p">)</span>
+            <span class="o">.</span><span class="n">count</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">other_admins_count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Cannot delete the last active admin user.&quot;</span>
+                       <span class="s2">&quot;Create another admin first.&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
     <span class="n">db</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">current_user</span><span class="p">)</span>
     <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
     <span class="k">return</span></div>
-
 
 <span class="c1"># ---------- helpers ----------</span>
 
@@ -639,11 +664,16 @@
 <span class="sd">        If unauthorized or Bookings service errors.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># RBAC: only self OR admin/auditor</span>
-    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">)</span> <span class="ow">and</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">user_id</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="ow">in</span> <span class="p">(</span><span class="n">UserRole</span><span class="o">.</span><span class="n">ADMIN</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">AUDITOR</span><span class="p">,</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">FACILITY_MANAGER</span><span class="p">):</span>
+        <span class="k">pass</span>  <span class="c1"># can view any user</span>
+    <span class="k">elif</span> <span class="n">current_user</span><span class="o">.</span><span class="n">role</span> <span class="o">==</span> <span class="n">UserRole</span><span class="o">.</span><span class="n">REGULAR</span> <span class="ow">and</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">:</span>
+        <span class="k">pass</span>  <span class="c1"># own history</span>
+    <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
-            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
-            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to view other users&#39; booking history&quot;</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+        <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to view booking history for this user&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
 
     <span class="n">token</span> <span class="o">=</span> <span class="n">make_service_account_token</span><span class="p">()</span>
     <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
@@ -672,6 +702,68 @@
         <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span>
         <span class="s2">&quot;bookings&quot;</span><span class="p">:</span> <span class="n">bookings</span><span class="p">,</span>
     <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="admin_update_user">
+<a class="viewcode-back" href="../../users_service.html#users_service.main.admin_update_user">[docs]</a>
+<span class="nd">@app</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s2">&quot;/users/</span><span class="si">{user_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">UserRead</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">admin_update_user</span><span class="p">(</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">update_data</span><span class="p">:</span> <span class="n">schemas</span><span class="o">.</span><span class="n">UserUpdate</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">User</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_only</span><span class="p">),</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Admin only: Update another user&#39;s profile information.</span>
+
+<span class="sd">    Editable fields:</span>
+<span class="sd">    - name</span>
+<span class="sd">    - email (must remain unique in the system)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_id : int</span>
+<span class="sd">        ID of the user to update.</span>
+<span class="sd">    update_data : UserUpdate</span>
+<span class="sd">        Fields to modify (name and/or email).</span>
+<span class="sd">    db : Session</span>
+<span class="sd">        Database session.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UserRead</span>
+<span class="sd">        Updated user record.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    HTTPException</span>
+<span class="sd">        If user is not found or new email is already taken.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">user_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">404</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;User not found&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">user</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">name</span>
+
+    <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span> <span class="o">!=</span> <span class="n">user</span><span class="o">.</span><span class="n">email</span><span class="p">:</span>
+        <span class="n">email_owner</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">first</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">email_owner</span> <span class="ow">and</span> <span class="n">email_owner</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                <span class="n">status_code</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Email already in use&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">user</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">email</span>
+
+    <span class="n">db</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">user</span></div>
+
 
 </pre></div>
 

@@ -32,7 +32,9 @@
             
   <h1>Source code for rooms_service.main</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">,</span> <span class="n">timezone</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jose</span><span class="w"> </span><span class="kn">import</span> <span class="n">jwt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">SECRET_KEY</span><span class="p">,</span> <span class="n">ALGORITHM</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">Depends</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Query</span><span class="p">,</span> <span class="n">status</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span>
@@ -47,6 +49,10 @@
 <span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Rooms Service&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;1.0.0&quot;</span><span class="p">)</span>
+
+<span class="n">SERVICE_ACCOUNT_USERNAME</span> <span class="o">=</span> <span class="s2">&quot;rooms_service&quot;</span>
+<span class="n">SERVICE_ACCOUNT_USER_ID</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">SERVICE_ACCOUNT_ROLE</span> <span class="o">=</span> <span class="s2">&quot;service_account&quot;</span>
 
 <span class="n">BOOKINGS_SERVICE_URL</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
     <span class="s2">&quot;BOOKINGS_SERVICE_URL&quot;</span><span class="p">,</span>
@@ -71,6 +77,25 @@
 
 
 <span class="n">admin_or_facility</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">)</span>
+
+<span class="n">viewer_roles</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">(</span>
+    <span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;regular&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;facility_manager&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;auditor&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;service_account&quot;</span><span class="p">,</span>  <span class="c1"># for inter-service calls if needed</span>
+<span class="p">)</span>
+
+<div class="viewcode-block" id="make_service_account_token">
+<a class="viewcode-back" href="../../rooms_service.html#rooms_service.main.make_service_account_token">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_service_account_token</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;sub&quot;</span><span class="p">:</span> <span class="n">SERVICE_ACCOUNT_USERNAME</span><span class="p">,</span>
+        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">SERVICE_ACCOUNT_ROLE</span><span class="p">,</span>
+        <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">SERVICE_ACCOUNT_USER_ID</span><span class="p">,</span>
+        <span class="s2">&quot;exp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">jwt</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">SECRET_KEY</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="n">ALGORITHM</span><span class="p">)</span></div>
 
 
 <span class="c1"># ---------- Create room ----------</span>
@@ -145,6 +170,7 @@
     <span class="n">location</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">equipment_contains</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">viewer_roles</span><span class="p">),</span>   <span class="c1"># &lt;- RBAC: who can view/search rooms</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Retrieve available rooms with optional filters.</span>
@@ -194,7 +220,11 @@
 <div class="viewcode-block" id="get_room">
 <a class="viewcode-back" href="../../rooms_service.html#rooms_service.main.get_room">[docs]</a>
 <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/rooms/</span><span class="si">{room_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">schemas</span><span class="o">.</span><span class="n">RoomRead</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_room</span><span class="p">(</span><span class="n">room_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">)):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_room</span><span class="p">(</span>
+    <span class="n">room_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">viewer_roles</span><span class="p">),</span>   <span class="c1"># &lt;- RBAC: who can view room details</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Retrieve a single room by its ID.</span>
 
@@ -356,6 +386,7 @@
     <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">viewer_roles</span><span class="p">),</span>   <span class="c1"># &lt;- RBAC: who can view room status</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Report the status of a room, optionally for a time range.</span>
@@ -372,30 +403,10 @@
 <span class="sd">        * Returns:</span>
 <span class="sd">            - &quot;available&quot; if the room is free in that interval.</span>
 <span class="sd">            - &quot;booked&quot; if the room is occupied in that interval.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    room_id : int</span>
-<span class="sd">        ID of the room to check.</span>
-<span class="sd">    start_time : Optional[datetime]</span>
-<span class="sd">        Start of the time window (ISO 8601).</span>
-<span class="sd">    end_time : Optional[datetime]</span>
-<span class="sd">        End of the time window (ISO 8601).</span>
-<span class="sd">    db : Session</span>
-<span class="sd">        Database session.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    dict</span>
-<span class="sd">        JSON object with keys {&#39;room_id&#39;, &#39;status&#39;}.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    HTTPException</span>
-<span class="sd">        If the room does not exist, the time range is invalid,</span>
-<span class="sd">        or the Bookings service cannot be reached.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="n">room</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Room</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Room</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">room_id</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    
     <span class="k">if</span> <span class="ow">not</span> <span class="n">room</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">room</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span>
@@ -415,7 +426,10 @@
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;end_time must be after start_time&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="c1"># Ask Bookings service about time-based availability</span>
+    <span class="c1"># Generate a short-lived service account token for inter-service call</span>
+    <span class="n">token</span> <span class="o">=</span> <span class="n">make_service_account_token</span><span class="p">()</span>
+    <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
     <span class="k">try</span><span class="p">:</span>
         <span class="n">resp</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">BOOKINGS_SERVICE_URL</span><span class="si">}</span><span class="s2">/bookings/availability&quot;</span><span class="p">,</span>
@@ -424,6 +438,7 @@
                 <span class="s2">&quot;start_time&quot;</span><span class="p">:</span> <span class="n">start_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
                 <span class="s2">&quot;end_time&quot;</span><span class="p">:</span> <span class="n">end_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
             <span class="p">},</span>
+            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">RequestError</span><span class="p">:</span>

@@ -305,7 +305,8 @@ def delete_my_account(
 
     Restrictions
     -----------
-    - AUDITOR and SERVICE_ACCOUNT roles cannot delete accounts.
+    - AUDITOR, MODERATOR and SERVICE_ACCOUNT roles cannot delete accounts.
+    - The last active ADMIN cannot delete their own account.
 
     Parameters
     ----------
@@ -321,19 +322,43 @@ def delete_my_account(
     Raises
     ------
     HTTPException
-        If user role is read-only.
+        - 403: If user role is read-only (AUDITOR, MODERATOR, SERVICE_ACCOUNT).
+        - 400: If attempting to delete the last active admin user.
     """
+    
     # ❗ block read-only / service accounts
-    if current_user.role in (UserRole.AUDITOR, UserRole.SERVICE_ACCOUNT, UserRole.MODERATOR):
+    if current_user.role in (
+        UserRole.AUDITOR,
+        UserRole.SERVICE_ACCOUNT,
+        UserRole.MODERATOR,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Read-only users cannot delete accounts",
         )
 
+    # ❗ do not allow deleting the last admin
+    if current_user.role == UserRole.ADMIN:
+        other_admins_count = (
+            db.query(models.User)
+            .filter(
+                models.User.role == UserRole.ADMIN,
+                models.User.id != current_user.id,
+                # if you have is_active, keep this; otherwise remove this line:
+                # models.User.is_active.is_(True),
+            )
+            .count()
+        )
+        if other_admins_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete the last active admin user."
+                       "Create another admin first.",
+            )
+
     db.delete(current_user)
     db.commit()
     return
-
 # ---------- helpers ----------
 
 admin_only = require_roles([UserRole.ADMIN])

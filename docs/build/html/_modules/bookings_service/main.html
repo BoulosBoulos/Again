@@ -63,7 +63,20 @@
 
 
 
-<span class="n">admin_facility_or_auditor</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;auditor&quot;</span><span class="p">)</span>
+<span class="n">admin_facility_or_auditor</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">(</span>
+    <span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;facility_manager&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;auditor&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;service_account&quot;</span><span class="p">,</span>  <span class="c1"># internal read-only access</span>
+<span class="p">)</span>
+
+<span class="n">availability_roles</span> <span class="o">=</span> <span class="n">require_roles</span><span class="p">(</span>
+    <span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;regular&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;facility_manager&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;auditor&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;service_account&quot;</span><span class="p">,</span>  <span class="c1"># used by Rooms/Users services for inter-service checks</span>
+<span class="p">)</span>
 
 
 <div class="viewcode-block" id="ensure_time_valid">
@@ -153,9 +166,15 @@
     <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
     <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
     <span class="n">db</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">get_db</span><span class="p">),</span>
+    <span class="n">_</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">availability_roles</span><span class="p">),</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Check if a room is available during a given time range.</span>
+
+<span class="sd">    Access</span>
+<span class="sd">    ------</span>
+<span class="sd">    - Allowed roles: admin, regular, facility_manager, auditor, service_account.</span>
+<span class="sd">    - Moderator is not allowed to call this endpoint.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -189,7 +208,7 @@
 
 
 
-<span class="c1"># ---------- Create booking (regular user) ----------</span>
+<span class="c1"># ---------- Create booking (regular / power users) ----------</span>
 
 
 <div class="viewcode-block" id="create_booking">
@@ -209,8 +228,8 @@
 
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
-<span class="sd">    - Denied for roles: auditor, service_account.</span>
-<span class="sd">    - Allowed for: regular, admin, facility_manager, moderator.</span>
+<span class="sd">    - Allowed for: regular, admin, facility_manager.</span>
+<span class="sd">    - Denied for roles: auditor, moderator, service_account.</span>
 
 <span class="sd">    Behavior</span>
 <span class="sd">    --------</span>
@@ -235,11 +254,11 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    HTTPException</span>
-<span class="sd">        If the user role is read-only, the time range is invalid,</span>
+<span class="sd">        If the user role is not allowed, the time range is invalid,</span>
 <span class="sd">        or the room is already booked.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-        <span class="c1"># ❗ Auditor and service accounts are read-only / system-only</span>
-    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+    <span class="c1"># ❗ Roles that cannot create bookings: auditor, moderator, service accounts</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot create bookings&quot;</span><span class="p">,</span>
@@ -285,6 +304,11 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    List bookings that belong to the authenticated user.</span>
 
+<span class="sd">    Access</span>
+<span class="sd">    ------</span>
+<span class="sd">    - Allowed for: admin, facility_manager, regular.</span>
+<span class="sd">    - Denied for: auditor, moderator, service_account.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    db : Session</span>
@@ -297,6 +321,12 @@
 <span class="sd">    List[BookingRead]</span>
 <span class="sd">        Bookings for the current user, ordered by start_time descending.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Only admin, facility_manager, and regular users can have personal bookings</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;regular&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot have personal bookings&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="n">user_id</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
     <span class="n">bookings</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">db</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Booking</span><span class="p">)</span>
@@ -308,7 +338,7 @@
 
 
 
-<span class="c1"># ---------- Admin / facility: list all bookings ----------</span>
+<span class="c1"># ---------- Admin / facility / auditor / service: list all bookings ----------</span>
 
 
 <div class="viewcode-block" id="list_all_bookings">
@@ -321,11 +351,11 @@
     <span class="n">_</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">admin_facility_or_auditor</span><span class="p">),</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Admin/Facility/Auditor: view all bookings with optional filters.</span>
+<span class="sd">    Admin/Facility/Auditor/Service Account: view all bookings with optional filters.</span>
 
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
-<span class="sd">    - Allowed roles: admin, facility_manager, auditor.</span>
+<span class="sd">    - Allowed roles: admin, facility_manager, auditor, service_account.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -371,8 +401,8 @@
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
 <span class="sd">    - Owner of the booking.</span>
-<span class="sd">    - Admin or facility_manager for any booking.</span>
-<span class="sd">    - Auditor and service_account cannot modify bookings.</span>
+<span class="sd">    - Admin for any booking.</span>
+<span class="sd">    - Auditor, moderator, and service_account cannot modify bookings.</span>
 
 <span class="sd">    Behavior</span>
 <span class="sd">    --------</span>
@@ -403,7 +433,7 @@
 <span class="sd">        If the booking is not found, the user is not allowed,</span>
 <span class="sd">        the time range is invalid, or there is a conflict.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot modify bookings&quot;</span><span class="p">,</span>
@@ -415,19 +445,28 @@
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Booking not found&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">is_admin_or_facility</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">)</span>
+    <span class="n">is_admin</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;admin&quot;</span>
     <span class="n">is_owner</span> <span class="o">=</span> <span class="n">booking</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin_or_facility</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
+    <span class="c1"># Admin can update any booking; others only their own</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to update this booking&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="c1"># Determine new values (fallback to existing ones if not provided)</span>
-    <span class="n">new_room_id</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">room_id</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">room_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">room_id</span>
-    <span class="n">new_start_time</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">start_time</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">start_time</span>
-    <span class="n">new_end_time</span> <span class="o">=</span> <span class="n">update_data</span><span class="o">.</span><span class="n">end_time</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">end_time</span>
+    <span class="n">new_room_id</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">update_data</span><span class="o">.</span><span class="n">room_id</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">room_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">room_id</span>
+    <span class="p">)</span>
+    <span class="n">new_start_time</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">update_data</span><span class="o">.</span><span class="n">start_time</span>
+        <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">start_time</span>
+    <span class="p">)</span>
+    <span class="n">new_end_time</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">update_data</span><span class="o">.</span><span class="n">end_time</span> <span class="k">if</span> <span class="n">update_data</span><span class="o">.</span><span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">booking</span><span class="o">.</span><span class="n">end_time</span>
+    <span class="p">)</span>
 
     <span class="c1"># Validate time</span>
     <span class="n">ensure_time_valid</span><span class="p">(</span><span class="n">new_start_time</span><span class="p">,</span> <span class="n">new_end_time</span><span class="p">)</span>
@@ -477,8 +516,8 @@
 <span class="sd">    Access</span>
 <span class="sd">    ------</span>
 <span class="sd">    - Owner of the booking.</span>
-<span class="sd">    - Admin or facility_manager for any booking.</span>
-<span class="sd">    - Auditor and service_account cannot cancel bookings.</span>
+<span class="sd">    - Admin for any booking.</span>
+<span class="sd">    - Auditor, moderator, and service_account cannot cancel bookings.</span>
 
 <span class="sd">    Behavior</span>
 <span class="sd">    --------</span>
@@ -504,7 +543,7 @@
 <span class="sd">        If the booking does not exist or the user is not allowed.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># ❗ block read-only / service accounts</span>
-    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auditor&quot;</span><span class="p">,</span> <span class="s2">&quot;moderator&quot;</span><span class="p">,</span> <span class="s2">&quot;service_account&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;This role cannot cancel bookings&quot;</span><span class="p">,</span>
@@ -516,10 +555,11 @@
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Booking not found&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">is_admin_or_facility</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;facility_manager&quot;</span><span class="p">)</span>
+    <span class="n">is_admin</span> <span class="o">=</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;admin&quot;</span>
     <span class="n">is_owner</span> <span class="o">=</span> <span class="n">booking</span><span class="o">.</span><span class="n">user_id</span> <span class="o">==</span> <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin_or_facility</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
+    <span class="c1"># Admin can cancel any; others only their own</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_admin</span> <span class="ow">or</span> <span class="n">is_owner</span><span class="p">):</span>
         <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
             <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not allowed to cancel this booking&quot;</span><span class="p">,</span>

@@ -43,8 +43,8 @@ comments, flags, and hiding/unhiding.</p>
 <section id="access">
 <h2>Access<a class="headerlink" href="#access" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Denied for roles: auditor, service_account.</p></li>
-<li><p>Allowed for: regular, admin, facility_manager, moderator.</p></li>
+<li><p>Denied for roles: auditor, moderator, service_account.</p></li>
+<li><p>Allowed for: regular, admin, facility_manager.</p></li>
 </ul>
 </section>
 <section id="behavior">
@@ -94,8 +94,8 @@ comments, flags, and hiding/unhiding.</p>
 <h2>Access<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Review owner.</p></li>
-<li><p>Admin or moderator.</p></li>
-<li><p>Auditor and service_account cannot delete reviews.</p></li>
+<li><p>Admin.</p></li>
+<li><p>Auditor, moderator, and service_account cannot delete reviews.</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">param review_id<span class="colon">:</span></dt>
@@ -424,8 +424,8 @@ comments, flags, and hiding/unhiding.</p>
 <h2>Access<a class="headerlink" href="#id12" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Review owner.</p></li>
-<li><p>Admin or moderator.</p></li>
-<li><p>Auditor and service_account cannot modify reviews.</p></li>
+<li><p>Admin.</p></li>
+<li><p>Auditor, moderator, and service_account cannot modify reviews.</p></li>
 </ul>
 </section>
 <section id="id13">
@@ -672,17 +672,6 @@ basic validation and sanitization for the comment field.</p>
 <dd><p>Bases: <a class="reference internal" href="#reviews_service.schemas.ReviewBase" title="reviews_service.schemas.ReviewBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReviewBase</span></code></a></p>
 <p>Schema returned when reading review data.</p>
 <p>Extends ReviewBase with identifiers and moderation flags.</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="reviews_service.schemas.ReviewRead.Config">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Config</span></span><a class="reference internal" href="_modules/reviews_service/schemas.html#ReviewRead.Config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#reviews_service.schemas.ReviewRead.Config" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="reviews_service.schemas.ReviewRead.Config.from_attributes">
-<span class="sig-name descname"><span class="pre">from_attributes</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#reviews_service.schemas.ReviewRead.Config.from_attributes" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
 <dl class="py attribute">
 <dt class="sig sig-object py" id="reviews_service.schemas.ReviewRead.created_at">
 <span class="sig-name descname"><span class="pre">created_at</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span></em><a class="headerlink" href="#reviews_service.schemas.ReviewRead.created_at" title="Link to this definition">¶</a></dt>
