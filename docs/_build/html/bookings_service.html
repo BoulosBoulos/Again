@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Bookings Service API &#8212; Smart Meeting Room &amp; Management System 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Reviews Service API" href="reviews_service.html" />
+    <link rel="prev" title="Rooms Service API" href="rooms_service.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="bookings-service-api">
+<h1>Bookings Service API<a class="headerlink" href="#bookings-service-api" title="Link to this heading">¶</a></h1>
+<p>Handles room bookings, time-range validation, conflict detection, and
+booking history queries.</p>
+<dl class="py function" id="module-bookings_service.main">
+<dt class="sig sig-object py" id="bookings_service.main.cancel_booking">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">cancel_booking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">booking_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#cancel_booking"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.cancel_booking" title="Link to this definition">¶</a></dt>
+<dd><p>Cancel (soft-delete) an existing booking.</p>
+<section id="access">
+<h2>Access<a class="headerlink" href="#access" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Owner of the booking.</p></li>
+<li><p>Admin for any booking.</p></li>
+<li><p>Auditor, moderator, and service_account cannot cancel bookings.</p></li>
+</ul>
+</section>
+<section id="behavior">
+<h2>Behavior<a class="headerlink" href="#behavior" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Sets the booking status to CANCELLED.</p></li>
+<li><p>Does not physically delete the record.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param booking_id<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ID of the booking to cancel.</p>
+</dd>
+<dt class="field-even">type booking_id<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">param claims<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Decoded JWT claims.</p>
+</dd>
+<dt class="field-even">type claims<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict</p>
+</dd>
+<dt class="field-odd">rtype<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">raises HTTPException<span class="colon">:</span></dt>
+<dd class="field-even"><p>If the booking does not exist or the user is not allowed.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.check_availability">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">check_availability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">room_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time:</span> <span class="pre">~datetime.datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time:</span> <span class="pre">~datetime.datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">require_roles.&lt;locals&gt;.dependency&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#check_availability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.check_availability" title="Link to this definition">¶</a></dt>
+<dd><p>Check if a room is available during a given time range.</p>
+<section id="id1">
+<h2>Access<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Allowed roles: admin, regular, facility_manager, auditor, service_account.</p></li>
+<li><p>Moderator is not allowed to call this endpoint.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param room_id<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Room to check.</p>
+</dd>
+<dt class="field-even">type room_id<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">param start_time<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Start of the desired interval (ISO 8601).</p>
+</dd>
+<dt class="field-even">type start_time<span class="colon">:</span></dt>
+<dd class="field-even"><p>datetime</p>
+</dd>
+<dt class="field-odd">param end_time<span class="colon">:</span></dt>
+<dd class="field-odd"><p>End of the desired interval (ISO 8601).</p>
+</dd>
+<dt class="field-even">type end_time<span class="colon">:</span></dt>
+<dd class="field-even"><p>datetime</p>
+</dd>
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>JSON object with:
+- ‘room_id’ : int
+- ‘available’ : bool</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+<dt class="field-odd">raises HTTPException<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If the time range is invalid.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.create_booking">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">create_booking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">booking_in:</span> <span class="pre">~bookings_service.schemas.BookingCreate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#create_booking"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.create_booking" title="Link to this definition">¶</a></dt>
+<dd><p>Create a new booking for the authenticated user.</p>
+<section id="id2">
+<h2>Access<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Allowed for: regular, admin, facility_manager.</p></li>
+<li><p>Denied for roles: auditor, moderator, service_account.</p></li>
+</ul>
+</section>
+<section id="id3">
+<h2>Behavior<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Validates that the time range is correct.</p></li>
+<li><p>Rejects bookings that overlap with existing non-cancelled bookings.</p></li>
+<li><p>Uses the user_id from the JWT claims as the booking owner.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param booking_in<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Room and time information for the new booking.</p>
+</dd>
+<dt class="field-even">type booking_in<span class="colon">:</span></dt>
+<dd class="field-even"><p>BookingCreate</p>
+</dd>
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">param claims<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Decoded JWT claims (user_id, role, etc.).</p>
+</dd>
+<dt class="field-even">type claims<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The newly created booking.</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>BookingRead</p>
+</dd>
+<dt class="field-odd">raises HTTPException<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If the user role is not allowed, the time range is invalid,
+    or the room is already booked.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.ensure_time_valid">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">ensure_time_valid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#ensure_time_valid"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.ensure_time_valid" title="Link to this definition">¶</a></dt>
+<dd><p>Validate that a booking time range is well-formed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start_time</strong> (<em>datetime</em>) – Start of the requested booking.</p></li>
+<li><p><strong>end_time</strong> (<em>datetime</em>) – End of the requested booking.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>HTTPException</strong> – If end_time is not strictly after start_time.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.generic_exception_handler">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">generic_exception_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Exception</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#generic_exception_handler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.generic_exception_handler" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.has_conflict">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">has_conflict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Session</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">room_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_booking_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/bookings_service/main.html#has_conflict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.has_conflict" title="Link to this definition">¶</a></dt>
+<dd><p>Check if there is any overlapping booking on the same room.</p>
+<p>Overlaps are detected for all bookings in the given room where:
+- status != CANCELLED
+- existing.end_time &gt; start_time
+- existing.start_time &lt; end_time</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>db</strong> (<em>Session</em>) – Database session.</p></li>
+<li><p><strong>room_id</strong> (<em>int</em>) – Room identifier.</p></li>
+<li><p><strong>start_time</strong> (<em>datetime</em>) – Proposed start time.</p></li>
+<li><p><strong>end_time</strong> (<em>datetime</em>) – Proposed end time.</p></li>
+<li><p><strong>ignore_booking_id</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – If provided, ignore this booking (useful when updating).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if there is at least one conflicting booking, False otherwise.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.http_exception_handler">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">http_exception_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">HTTPException</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#http_exception_handler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.http_exception_handler" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.list_all_bookings">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">list_all_bookings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">room_id:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">Query(None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user_id:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">Query(None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">require_roles.&lt;locals&gt;.dependency&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#list_all_bookings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.list_all_bookings" title="Link to this definition">¶</a></dt>
+<dd><p>Admin/Facility/Auditor/Service Account: view all bookings with optional filters.</p>
+<section id="id4">
+<h2>Access<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Allowed roles: admin, facility_manager, auditor, service_account.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param room_id<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If provided, filter bookings for a specific room.</p>
+</dd>
+<dt class="field-even">type room_id<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[int]</p>
+</dd>
+<dt class="field-odd">param user_id<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If provided, filter bookings for a specific user.</p>
+</dd>
+<dt class="field-even">type user_id<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[int]</p>
+</dd>
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of bookings matching the filters, ordered by start_time descending.</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[BookingRead]</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.list_my_bookings">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">list_my_bookings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#list_my_bookings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.list_my_bookings" title="Link to this definition">¶</a></dt>
+<dd><p>List bookings that belong to the authenticated user.</p>
+<section id="id5">
+<h2>Access<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Allowed for: admin, facility_manager, regular.</p></li>
+<li><p>Denied for: auditor, moderator, service_account.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">param claims<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Decoded JWT claims containing the current user’s ID.</p>
+</dd>
+<dt class="field-even">type claims<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Bookings for the current user, ordered by start_time descending.</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[BookingRead]</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.root">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#root"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.root" title="Link to this definition">¶</a></dt>
+<dd><p>Health-check endpoint for the Bookings service.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A small JSON payload indicating that the service is running.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.main.update_booking">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.main.</span></span><span class="sig-name descname"><span class="pre">update_booking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">booking_id:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_data:</span> <span class="pre">~bookings_service.schemas.BookingUpdate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db:</span> <span class="pre">~sqlalchemy.orm.session.Session</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_db&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claims:</span> <span class="pre">~typing.Dict</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;function</span> <span class="pre">get_current_user_claims&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/main.html#update_booking"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.main.update_booking" title="Link to this definition">¶</a></dt>
+<dd><p>Update an existing booking’s room, time, or status.</p>
+<section id="id6">
+<h2>Access<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Owner of the booking.</p></li>
+<li><p>Admin for any booking.</p></li>
+<li><p>Auditor, moderator, and service_account cannot modify bookings.</p></li>
+</ul>
+</section>
+<section id="id7">
+<h2>Behavior<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Applies only the fields provided in BookingUpdate.</p></li>
+<li><p>Re-validates the final time range.</p></li>
+<li><p>Ensures no conflicts with other non-cancelled bookings.</p></li>
+<li><p>Optionally updates the booking status.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param booking_id<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ID of the booking to update.</p>
+</dd>
+<dt class="field-even">type booking_id<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">param update_data<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Partial update data for the booking.</p>
+</dd>
+<dt class="field-even">type update_data<span class="colon">:</span></dt>
+<dd class="field-even"><p>BookingUpdate</p>
+</dd>
+<dt class="field-odd">param db<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Database session.</p>
+</dd>
+<dt class="field-even">type db<span class="colon">:</span></dt>
+<dd class="field-even"><p>Session</p>
+</dd>
+<dt class="field-odd">param claims<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Decoded JWT claims.</p>
+</dd>
+<dt class="field-even">type claims<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The updated booking.</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>BookingRead</p>
+</dd>
+<dt class="field-odd">raises HTTPException<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If the booking is not found, the user is not allowed,
+    the time range is invalid, or there is a conflict.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<section id="module-bookings_service.models">
+<span id="models"></span><h2>Models<a class="headerlink" href="#module-bookings_service.models" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="bookings_service.models.Booking">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.models.</span></span><span class="sig-name descname"><span class="pre">Booking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/models.html#Booking"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.models.Booking" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Base</span></code></p>
+<p>SQLAlchemy model representing a room booking.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.id">
+<span class="sig-name descname"><span class="pre">id</span></span><a class="headerlink" href="#bookings_service.models.Booking.id" title="Link to this definition">¶</a></dt>
+<dd><p>Primary key.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.user_id">
+<span class="sig-name descname"><span class="pre">user_id</span></span><a class="headerlink" href="#bookings_service.models.Booking.user_id" title="Link to this definition">¶</a></dt>
+<dd><p>Identifier of the user who owns the booking.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.room_id">
+<span class="sig-name descname"><span class="pre">room_id</span></span><a class="headerlink" href="#bookings_service.models.Booking.room_id" title="Link to this definition">¶</a></dt>
+<dd><p>Identifier of the booked room.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.start_time">
+<span class="sig-name descname"><span class="pre">start_time</span></span><a class="headerlink" href="#bookings_service.models.Booking.start_time" title="Link to this definition">¶</a></dt>
+<dd><p>Start of the reserved time interval.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>datetime</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.end_time">
+<span class="sig-name descname"><span class="pre">end_time</span></span><a class="headerlink" href="#bookings_service.models.Booking.end_time" title="Link to this definition">¶</a></dt>
+<dd><p>End of the reserved time interval.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>datetime</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.status">
+<span class="sig-name descname"><span class="pre">status</span></span><a class="headerlink" href="#bookings_service.models.Booking.status" title="Link to this definition">¶</a></dt>
+<dd><p>Current status of the booking (pending/confirmed/cancelled).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#bookings_service.models.BookingStatus" title="bookings_service.models.BookingStatus">BookingStatus</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.Booking.created_at">
+<span class="sig-name descname"><span class="pre">created_at</span></span><a class="headerlink" href="#bookings_service.models.Booking.created_at" title="Link to this definition">¶</a></dt>
+<dd><p>Timestamp when the booking was created.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>datetime</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">created_at</span></span><a class="headerlink" href="#id0" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id8">
+<span class="sig-name descname"><span class="pre">end_time</span></span><a class="headerlink" href="#id8" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id9">
+<span class="sig-name descname"><span class="pre">id</span></span><a class="headerlink" href="#id9" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id10">
+<span class="sig-name descname"><span class="pre">room_id</span></span><a class="headerlink" href="#id10" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id11">
+<span class="sig-name descname"><span class="pre">start_time</span></span><a class="headerlink" href="#id11" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id12">
+<span class="sig-name descname"><span class="pre">status</span></span><a class="headerlink" href="#id12" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id13">
+<span class="sig-name descname"><span class="pre">user_id</span></span><a class="headerlink" href="#id13" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bookings_service.models.BookingStatus">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.models.</span></span><span class="sig-name descname"><span class="pre">BookingStatus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/models.html#BookingStatus"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.models.BookingStatus" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<p>Enumeration of possible booking statuses.</p>
+<section id="values">
+<h3>Values<a class="headerlink" href="#values" title="Link to this heading">¶</a></h3>
+<dl class="simple">
+<dt>pending</dt><dd><p>Booking has been created but not yet confirmed.</p>
+</dd>
+<dt>confirmed</dt><dd><p>Booking is active and holds the room for the given time range.</p>
+</dd>
+<dt>cancelled</dt><dd><p>Booking has been cancelled and should not block the room.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.BookingStatus.CANCELLED">
+<span class="sig-name descname"><span class="pre">CANCELLED</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cancelled'</span></em><a class="headerlink" href="#bookings_service.models.BookingStatus.CANCELLED" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.BookingStatus.CONFIRMED">
+<span class="sig-name descname"><span class="pre">CONFIRMED</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'confirmed'</span></em><a class="headerlink" href="#bookings_service.models.BookingStatus.CONFIRMED" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.models.BookingStatus.PENDING">
+<span class="sig-name descname"><span class="pre">PENDING</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'pending'</span></em><a class="headerlink" href="#bookings_service.models.BookingStatus.PENDING" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+</dd></dl>
+
+</section>
+<section id="module-bookings_service.schemas">
+<span id="schemas"></span><h2>Schemas<a class="headerlink" href="#module-bookings_service.schemas" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingBase">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.schemas.</span></span><span class="sig-name descname"><span class="pre">BookingBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">room_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ge</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">ge</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/schemas.html#BookingBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.schemas.BookingBase" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Base schema for booking time and room information.</p>
+<p>Shared fields used across booking create and read operations.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingBase.end_time">
+<span class="sig-name descname"><span class="pre">end_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span></em><a class="headerlink" href="#bookings_service.schemas.BookingBase.end_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingBase.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></em><a class="headerlink" href="#bookings_service.schemas.BookingBase.model_config" title="Link to this definition">¶</a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingBase.room_id">
+<span class="sig-name descname"><span class="pre">room_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#bookings_service.schemas.BookingBase.room_id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingBase.start_time">
+<span class="sig-name descname"><span class="pre">start_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span></em><a class="headerlink" href="#bookings_service.schemas.BookingBase.start_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingCreate">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.schemas.</span></span><span class="sig-name descname"><span class="pre">BookingCreate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">room_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ge</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">ge</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/schemas.html#BookingCreate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.schemas.BookingCreate" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#bookings_service.schemas.BookingBase" title="bookings_service.schemas.BookingBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">BookingBase</span></code></a></p>
+<p>Schema for creating a new booking.</p>
+<p>Inherits room_id, start_time, and end_time from BookingBase.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingCreate.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></em><a class="headerlink" href="#bookings_service.schemas.BookingCreate.model_config" title="Link to this definition">¶</a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.schemas.</span></span><span class="sig-name descname"><span class="pre">BookingRead</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">room_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ge</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">ge</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#bookings_service.models.BookingStatus" title="bookings_service.models.BookingStatus"><span class="pre">BookingStatus</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">created_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/schemas.html#BookingRead"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.schemas.BookingRead" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#bookings_service.schemas.BookingBase" title="bookings_service.schemas.BookingBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">BookingBase</span></code></a></p>
+<p>Schema returned when reading booking information.</p>
+<p>Extends BookingBase with identifiers, status, and creation timestamp.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.created_at">
+<span class="sig-name descname"><span class="pre">created_at</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.created_at" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.id">
+<span class="sig-name descname"><span class="pre">id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'from_attributes':</span> <span class="pre">True}</span></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.model_config" title="Link to this definition">¶</a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.status">
+<span class="sig-name descname"><span class="pre">status</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#bookings_service.models.BookingStatus" title="bookings_service.models.BookingStatus"><span class="pre">BookingStatus</span></a></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.status" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingRead.user_id">
+<span class="sig-name descname"><span class="pre">user_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#bookings_service.schemas.BookingRead.user_id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingUpdate">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.schemas.</span></span><span class="sig-name descname"><span class="pre">BookingUpdate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">room_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ge</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">ge</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#bookings_service.models.BookingStatus" title="bookings_service.models.BookingStatus"><span class="pre">BookingStatus</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/schemas.html#BookingUpdate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.schemas.BookingUpdate" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Schema for partially updating an existing booking.</p>
+<p>All fields are optional; only provided values will be applied.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingUpdate.end_time">
+<span class="sig-name descname"><span class="pre">end_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#bookings_service.schemas.BookingUpdate.end_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingUpdate.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></em><a class="headerlink" href="#bookings_service.schemas.BookingUpdate.model_config" title="Link to this definition">¶</a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingUpdate.room_id">
+<span class="sig-name descname"><span class="pre">room_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#bookings_service.schemas.BookingUpdate.room_id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingUpdate.start_time">
+<span class="sig-name descname"><span class="pre">start_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#bookings_service.schemas.BookingUpdate.start_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="bookings_service.schemas.BookingUpdate.status">
+<span class="sig-name descname"><span class="pre">status</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#bookings_service.models.BookingStatus" title="bookings_service.models.BookingStatus"><span class="pre">BookingStatus</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#bookings_service.schemas.BookingUpdate.status" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-bookings_service.database">
+<span id="database"></span><h2>Database<a class="headerlink" href="#module-bookings_service.database" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.database.get_db">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.database.</span></span><span class="sig-name descname"><span class="pre">get_db</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/bookings_service/database.html#get_db"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.database.get_db" title="Link to this definition">¶</a></dt>
+<dd><p>Yield a SQLAlchemy database session for the Bookings service.</p>
+<p>This function is used as a FastAPI dependency, creating a scoped
+session per HTTP request and ensuring it is closed afterwards.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Yields<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Session</em> – Active SQLAlchemy session bound to the bookings database engine.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-bookings_service.auth">
+<span id="authentication-rbac"></span><h2>Authentication &amp; RBAC<a class="headerlink" href="#module-bookings_service.auth" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.auth.get_current_user_claims">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bookings_service.auth.</span></span><span class="sig-name descname"><span class="pre">get_current_user_claims</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">credentials:</span> <span class="pre">~fastapi.security.http.HTTPAuthorizationCredentials</span> <span class="pre">=</span> <span class="pre">Depends(dependency=&lt;fastapi.security.http.HTTPBearer</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cache=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope=None)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/bookings_service/auth.html#get_current_user_claims"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.auth.get_current_user_claims" title="Link to this definition">¶</a></dt>
+<dd><p>Decode a JWT bearer token and extract user claims.</p>
+<p>The token is expected in the Authorization header as a Bearer token.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>credentials</strong> (<em>HTTPAuthorizationCredentials</em>) – Parsed Authorization header.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary containing:
+- ‘user_id’ : int
+- ‘username’ : str
+- ‘role’ : str</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[str, Any]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>HTTPException</strong> – If the token is missing, invalid, or cannot be decoded.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="bookings_service.auth.require_roles">
+<span class="sig-prename descclassname"><span class="pre">bookings_service.auth.</span></span><span class="sig-name descname"><span class="pre">require_roles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">allowed_roles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Callable</span></span></span><a class="reference internal" href="_modules/bookings_service/auth.html#require_roles"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bookings_service.auth.require_roles" title="Link to this definition">¶</a></dt>
+<dd><p>Build a dependency that enforces role-based access for bookings endpoints.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>allowed_roles</strong> (<em>str</em>) – One or more role names that are allowed to access the route.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A FastAPI dependency that checks the caller’s role from JWT claims
+and raises HTTP 403 if access is not permitted.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Callable</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Smart Meeting Room & Management System</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="users_service.html">Users Service API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rooms_service.html">Rooms Service API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bookings Service API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.cancel_booking"><code class="docutils literal notranslate"><span class="pre">cancel_booking()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.check_availability"><code class="docutils literal notranslate"><span class="pre">check_availability()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.create_booking"><code class="docutils literal notranslate"><span class="pre">create_booking()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.ensure_time_valid"><code class="docutils literal notranslate"><span class="pre">ensure_time_valid()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.generic_exception_handler"><code class="docutils literal notranslate"><span class="pre">generic_exception_handler()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.has_conflict"><code class="docutils literal notranslate"><span class="pre">has_conflict()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.http_exception_handler"><code class="docutils literal notranslate"><span class="pre">http_exception_handler()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.list_all_bookings"><code class="docutils literal notranslate"><span class="pre">list_all_bookings()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.list_my_bookings"><code class="docutils literal notranslate"><span class="pre">list_my_bookings()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.root"><code class="docutils literal notranslate"><span class="pre">root()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bookings_service.main.update_booking"><code class="docutils literal notranslate"><span class="pre">update_booking()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-bookings_service.models">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-bookings_service.schemas">Schemas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-bookings_service.database">Database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-bookings_service.auth">Authentication &amp; RBAC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reviews_service.html">Reviews Service API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="rooms_service.html" title="previous chapter">Rooms Service API</a></li>
+      <li>Next: <a href="reviews_service.html" title="next chapter">Reviews Service API</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Ahmad Hlayhel & Boulos Boulos.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/bookings_service.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
