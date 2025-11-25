@@ -1,7 +1,11 @@
 from typing import Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status, Request, APIRouter
+from fastapi.responses import JSONResponse
+
 from sqlalchemy.orm import Session
+
+from .rate_limiter import review_rate_limiter
 
 from . import models, schemas
 from .auth import get_current_user_claims, require_roles
@@ -11,6 +15,37 @@ from .database import Base, engine, get_db
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Reviews Service", version="1.0.0")
+
+router_v1 = APIRouter(prefix="/api/v1")
+
+SERVICE_NAME = "reviews"
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": 500,
+            "detail": "Internal server error",
+        },
+    )
 
 
 @app.get("/")
@@ -63,10 +98,11 @@ def get_review_or_404(db: Session, review_id: int) -> models.Review:
 # ---------- Create review (authenticated user) ----------
 
 
-@app.post(
+@router_v1.post(
     "/reviews",
     response_model=schemas.ReviewRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(review_rate_limiter)],
 )
 def create_review(
     review_in: schemas.ReviewCreate,
@@ -142,7 +178,7 @@ def create_review(
 # ---------- Public: list visible reviews for a room ----------
 
 
-@app.get("/reviews/room/{room_id}", response_model=List[schemas.ReviewRead])
+@router_v1.get("/reviews/room/{room_id}", response_model=List[schemas.ReviewRead])
 def list_room_reviews(
     room_id: int,
     db: Session = Depends(get_db),
@@ -182,7 +218,7 @@ def list_room_reviews(
 # ---------- Admin/moderator: list all reviews with filters ----------
 
 
-@app.get("/reviews", response_model=List[schemas.ReviewRead])
+@router_v1.get("/reviews", response_model=List[schemas.ReviewRead])
 def list_all_reviews(
     room_id: Optional[int] = Query(default=None, ge=1),
     user_id: Optional[int] = Query(default=None, ge=1),
@@ -243,7 +279,7 @@ def list_all_reviews(
 # ---------- Update review (owner or admin/moderator) ----------
 
 
-@app.put("/reviews/{review_id}", response_model=schemas.ReviewRead)
+@router_v1.put("/reviews/{review_id}", response_model=schemas.ReviewRead)
 def update_review(
     review_id: int,
     update_data: schemas.ReviewUpdate,
@@ -320,7 +356,7 @@ def update_review(
 # ---------- Delete review (owner or admin/moderator) ----------
 
 
-@app.delete("/reviews/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.delete("/reviews/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_review(
     review_id: int,
     db: Session = Depends(get_db),
@@ -382,7 +418,7 @@ def delete_review(
 # ---------- Flag / hide / unhide ----------
 
 
-@app.post("/reviews/{review_id}/flag", response_model=schemas.ReviewRead)
+@router_v1.post("/reviews/{review_id}/flag", response_model=schemas.ReviewRead)
 def flag_review(
     review_id: int,
     db: Session = Depends(get_db),
@@ -434,7 +470,7 @@ def flag_review(
     return review
 
 
-@app.post("/reviews/{review_id}/hide", response_model=schemas.ReviewRead)
+@router_v1.post("/reviews/{review_id}/hide", response_model=schemas.ReviewRead)
 def hide_review(
     review_id: int,
     db: Session = Depends(get_db),
@@ -471,7 +507,7 @@ def hide_review(
     return review
 
 
-@app.post("/reviews/{review_id}/unhide", response_model=schemas.ReviewRead)
+@router_v1.post("/reviews/{review_id}/unhide", response_model=schemas.ReviewRead)
 def unhide_review(
     review_id: int,
     db: Session = Depends(get_db),
@@ -507,7 +543,7 @@ def unhide_review(
     db.refresh(review)
     return review
 
-@app.post("/reviews/{review_id}/unflag", response_model=schemas.ReviewRead)
+@router_v1.post("/reviews/{review_id}/unflag", response_model=schemas.ReviewRead)
 def unflag_review(
     review_id: int,
     db: Session = Depends(get_db),
@@ -542,3 +578,5 @@ def unflag_review(
     db.commit()
     db.refresh(review)
     return review
+
+app.include_router(router_v1)

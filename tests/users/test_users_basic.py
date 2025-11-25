@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from users_service.main import app
 from users_service.database import Base, engine
 
+os.environ["TESTING"] = "1"
 client = TestClient(app)
 
 
@@ -44,7 +45,7 @@ def register_user(username: str, email: str, password: str = "test1234"):
         "email": email,
         "password": password,
     }
-    response = client.post("/users/register", json=payload)
+    response = client.post("/api/v1/users/register", json=payload)
     assert response.status_code == 201
     return response.json()
 
@@ -52,7 +53,7 @@ def register_user(username: str, email: str, password: str = "test1234"):
 def login_and_get_token(username: str, password: str):
     # login uses form data, not JSON
     data = {"username": username, "password": password}
-    response = client.post("/users/login", data=data)
+    response = client.post("/api/v1/users/login", data=data)
     assert response.status_code == 200
     body = response.json()
     assert "access_token" in body
@@ -64,7 +65,7 @@ def login_and_get_token(username: str, password: str):
 
 def test_register_user_success_first_user_is_admin():
     res = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "First User",
             "username": "admin1",
@@ -95,7 +96,7 @@ def test_register_duplicate_username_fails():
     register_user("user1", "user1@example.com")
     # same username, different email
     res = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "Other User",
             "username": "user1",
@@ -111,7 +112,7 @@ def test_register_duplicate_username_fails():
 def test_register_duplicate_email_fails():
     # first user ok
     res1 = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "User One",
             "username": "user1",
@@ -123,7 +124,7 @@ def test_register_duplicate_email_fails():
 
     # second user with same email => 400
     res2 = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "User Two",
             "username": "user2",
@@ -137,7 +138,7 @@ def test_register_duplicate_email_fails():
 
 def test_password_too_short_rejected():
     res = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "Weak User",
             "username": "weak1",
@@ -151,7 +152,7 @@ def test_password_too_short_rejected():
 
 def test_password_no_digit_rejected():
     res = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "Weak User",
             "username": "weak2",
@@ -165,7 +166,7 @@ def test_password_no_digit_rejected():
 
 def test_password_no_letter_rejected():
     res = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "Weak User",
             "username": "weak3",
@@ -186,7 +187,7 @@ def test_login_and_get_me():
     token = login_and_get_token("user1", "user1234")
 
     headers = {"Authorization": f"Bearer {token}"}
-    res = client.get("/users/me", headers=headers)
+    res = client.get("/api/v1/users/me", headers=headers)
     assert res.status_code == 200
     body = res.json()
     assert body["username"] == "user1"
@@ -198,7 +199,7 @@ def test_login_wrong_username_fails():
     register_user("user1", "user1@example.com", password="User1234")
 
     res = client.post(
-        "/users/login",
+        "/api/v1/users/login",
         data={"username": "unknown", "password": "User1234"},
     )
     assert res.status_code == 401
@@ -208,14 +209,14 @@ def test_login_wrong_password_fails():
     register_user("user1", "user1@example.com", password="User1234")
 
     res = client.post(
-        "/users/login",
+        "/api/v1/users/login",
         data={"username": "user1", "password": "WrongPass"},
     )
     assert res.status_code == 401
 
 
 def test_access_me_without_token_fails():
-    res = client.get("/users/me")
+    res = client.get("/api/v1/users/me")
     assert res.status_code == 401
 
 
@@ -228,7 +229,7 @@ def test_update_my_profile_success():
     headers = {"Authorization": f"Bearer {token}"}
 
     res = client.put(
-        "/users/me",
+        "/api/v1/users/me",
         headers=headers,
         json={"name": "New Name", "email": "newemail@example.com"},
     )
@@ -248,7 +249,7 @@ def test_update_email_to_existing_one_fails():
 
     # user1 tries to change email to user2's email
     res = client.put(
-        "/users/me",
+        "/api/v1/users/me",
         headers=headers1,
         json={"email": "user2@example.com"},
     )
@@ -268,7 +269,7 @@ def test_regular_user_cannot_list_all_users():
     token = login_and_get_token("user1", "user1234")
 
     headers = {"Authorization": f"Bearer {token}"}
-    res = client.get("/users", headers=headers)
+    res = client.get("/api/v1/users", headers=headers)
     assert res.status_code == 403
 
 
@@ -280,7 +281,7 @@ def test_admin_can_list_all_users():
     token = login_and_get_token("admin1", "admin123")
     headers = {"Authorization": f"Bearer {token}"}
 
-    res = client.get("/users", headers=headers)
+    res = client.get("/api/v1/users", headers=headers)
     assert res.status_code == 200
     body = res.json()
     usernames = {u["username"] for u in body}
@@ -295,7 +296,7 @@ def test_admin_can_get_user_by_username():
     admin_token = login_and_get_token("admin1", "Admin1234")
     headers_admin = {"Authorization": f"Bearer {admin_token}"}
 
-    res = client.get(f"/users/{user['username']}", headers=headers_admin)
+    res = client.get(f"/api/v1/users/{user['username']}", headers=headers_admin)
     assert res.status_code == 200
     body = res.json()
     assert body["id"] == user["id"]
@@ -308,7 +309,7 @@ def test_get_user_by_username_not_found():
     admin_token = login_and_get_token("admin1", "Admin1234")
     headers_admin = {"Authorization": f"Bearer {admin_token}"}
 
-    res = client.get("/users/unknownuser", headers=headers_admin)
+    res = client.get("/api/v1/users/unknownuser", headers=headers_admin)
     assert res.status_code == 404
 
 
@@ -318,7 +319,7 @@ def test_get_user_by_username_not_found():
 def test_admin_can_reset_user_password():
     # create admin
     res_admin = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "Admin User",
             "username": "admin1",
@@ -330,7 +331,7 @@ def test_admin_can_reset_user_password():
 
     # create regular user
     res_user = client.post(
-        "/users/register",
+        "/api/v1/users/register",
         json={
             "name": "Regular User",
             "username": "user1",
@@ -344,7 +345,7 @@ def test_admin_can_reset_user_password():
 
     # admin logs in
     res_admin_login = client.post(
-        "/users/login",
+        "/api/v1/users/login",
         data={"username": "admin1", "password": "admin123"},
     )
     assert res_admin_login.status_code == 200
@@ -353,7 +354,7 @@ def test_admin_can_reset_user_password():
 
     # admin resets user's password
     res_reset = client.post(
-        f"/users/{user_id}/reset-password",
+        f"/api/v1/users/{user_id}/reset-password",
         json={"new_password": "newpass456"},
         headers=headers_admin,
     )
@@ -361,14 +362,14 @@ def test_admin_can_reset_user_password():
 
     # old password should no longer work
     res_old_login = client.post(
-        "/users/login",
+        "/api/v1/users/login",
         data={"username": "user1", "password": "oldpass123"},
     )
     assert res_old_login.status_code == 401
 
     # new password should work
     res_new_login = client.post(
-        "/users/login",
+        "/api/v1/users/login",
         data={"username": "user1", "password": "newpass456"},
     )
     assert res_new_login.status_code == 200
@@ -383,12 +384,12 @@ def test_admin_can_delete_other_user():
     admin_token = login_and_get_token("admin1", "Admin1234")
     headers_admin = {"Authorization": f"Bearer {admin_token}"}
 
-    res = client.delete(f"/users/{user['id']}", headers=headers_admin)
+    res = client.delete(f"/api/v1/users/{user['id']}", headers=headers_admin)
     assert res.status_code == 204
 
     # user login should fail now
     res_login = client.post(
-        "/users/login", data={"username": "user1", "password": "User1234"}
+        "/api/v1/users/login", data={"username": "user1", "password": "User1234"}
     )
     assert res_login.status_code == 401
 
@@ -401,7 +402,7 @@ def test_admin_can_change_user_role():
     headers_admin = {"Authorization": f"Bearer {admin_token}"}
 
     res = client.put(
-        f"/users/{user['id']}/role",
+        f"/api/v1/users/{user['id']}/role",
         headers=headers_admin,
         json={"role": "facility_manager"},
     )
@@ -412,7 +413,7 @@ def test_admin_can_change_user_role():
     # user logs in and sees updated role on /users/me
     user_token = login_and_get_token("user1", "User1234")
     headers_user = {"Authorization": f"Bearer {user_token}"}
-    res_me = client.get("/users/me", headers=headers_user)
+    res_me = client.get("/api/v1/users/me", headers=headers_user)
     assert res_me.status_code == 200
     assert res_me.json()["role"] == "facility_manager"
 
@@ -425,7 +426,7 @@ def test_admin_can_update_other_user_profile():
     headers_admin = {"Authorization": f"Bearer {admin_token}"}
 
     res = client.put(
-        f"/users/{user['id']}",
+        f"/api/v1/users/{user['id']}",
         headers=headers_admin,
         json={"name": "Updated Name", "email": "updated@example.com"},
     )
@@ -445,7 +446,7 @@ def test_admin_update_user_email_conflict_fails():
 
     # try to change user2's email to user1's email
     res = client.put(
-        f"/users/{user2['id']}",
+        f"/api/v1/users/{user2['id']}",
         headers=headers_admin,
         json={"email": "user1@example.com"},
     )
@@ -468,7 +469,7 @@ def test_auditor_read_only_on_users():
 
     # admin changes role of aud1 to auditor
     res_role = client.put(
-        f"/users/{auditor['id']}/role",
+        f"/api/v1/users/{auditor['id']}/role",
         headers=headers_admin,
         json={"role": "auditor"},
     )
@@ -480,15 +481,15 @@ def test_auditor_read_only_on_users():
     headers_aud = {"Authorization": f"Bearer {auditor_token}"}
 
     # can list users (read-only)
-    res_list = client.get("/users", headers=headers_aud)
+    res_list = client.get("/api/v1/users", headers=headers_aud)
     assert res_list.status_code == 200
 
     # cannot modify own profile
-    res_update_me = client.put("/users/me", headers=headers_aud, json={"name": "Hack"})
+    res_update_me = client.put("/api/v1/users/me", headers=headers_aud, json={"name": "Hack"})
     assert res_update_me.status_code == 403
 
     # cannot delete own account
-    res_del_me = client.delete("/users/me", headers=headers_aud)
+    res_del_me = client.delete("/api/v1/users/me", headers=headers_aud)
     assert res_del_me.status_code == 403
 
 
@@ -505,7 +506,7 @@ def test_moderator_cannot_modify_or_delete_or_view_history():
 
     # promote mod1 to moderator
     res_role = client.put(
-        f"/users/{mod_user['id']}/role",
+        f"/api/v1/users/{mod_user['id']}/role",
         headers=headers_admin,
         json={"role": "moderator"},
     )
@@ -516,17 +517,17 @@ def test_moderator_cannot_modify_or_delete_or_view_history():
 
     # cannot update own profile
     res_update_me = client.put(
-        "/users/me", headers=headers_mod, json={"name": "New Mod Name"}
+        "/api/v1/users/me", headers=headers_mod, json={"name": "New Mod Name"}
     )
     assert res_update_me.status_code == 403
 
     # cannot delete own account
-    res_del_me = client.delete("/users/me", headers=headers_mod)
+    res_del_me = client.delete("/api/v1/users/me", headers=headers_mod)
     assert res_del_me.status_code == 403
 
     # cannot view booking history (for self or others) – check self
     res_hist = client.get(
-        f"/users/{mod_user['id']}/booking-history", headers=headers_mod
+        f"/api/v1/users/{mod_user['id']}/booking-history", headers=headers_mod
     )
     assert res_hist.status_code == 403
 
@@ -542,7 +543,7 @@ def test_facility_manager_can_update_own_profile_and_view_any_booking_history(mo
 
     # promote fm1 to facility_manager
     res_role = client.put(
-        f"/users/{fm_user['id']}/role",
+        f"/api/v1/users/{fm_user['id']}/role",
         headers=headers_admin,
         json={"role": "facility_manager"},
     )
@@ -553,7 +554,7 @@ def test_facility_manager_can_update_own_profile_and_view_any_booking_history(mo
 
     # facility manager can update own profile
     res_update_me = client.put(
-        "/users/me",
+        "/api/v1/users/me",
         headers=headers_fm,
         json={"name": "FM Updated", "email": "fm_updated@example.com"},
     )
@@ -580,7 +581,7 @@ def test_facility_manager_can_update_own_profile_and_view_any_booking_history(mo
     monkeypatch.setattr(httpx, "get", fake_httpx_get)
 
     res_hist = client.get(
-        f"/users/{other_user['id']}/booking-history", headers=headers_fm
+        f"/api/v1/users/{other_user['id']}/booking-history", headers=headers_fm
     )
     assert res_hist.status_code == 200
     assert res_hist.json()["bookings"] == fake_bookings
@@ -603,7 +604,7 @@ def test_facility_manager_can_update_own_profile_and_view_any_booking_history(mo
     monkeypatch.setattr(httpx, "get", fake_httpx_get)
 
     res_hist = client.get(
-        f"/users/{other_user['id']}/booking-history", headers=headers_fm
+        f"/api/v1/users/{other_user['id']}/booking-history", headers=headers_fm
     )
     assert res_hist.status_code == 200
     assert res_hist.json()["bookings"] == fake_bookings
@@ -622,7 +623,7 @@ def test_regular_user_cannot_view_other_users_booking_history():
     headers_user1 = {"Authorization": f"Bearer {token_user1}"}
 
     # user1 trying to view user2's booking history → should be forbidden
-    res = client.get(f"/users/{user2['id']}/booking-history", headers=headers_user1)
+    res = client.get(f"/api/v1/users/{user2['id']}/booking-history", headers=headers_user1)
     assert res.status_code == 403
 
 
@@ -665,7 +666,7 @@ def test_admin_can_view_user_booking_history_via_bookings_service(monkeypatch):
     # monkeypatch httpx.get used inside users_service
     monkeypatch.setattr(httpx, "get", fake_httpx_get)
 
-    res = client.get(f"/users/{user['id']}/booking-history", headers=headers_admin)
+    res = client.get(f"/api/v1/users/{user['id']}/booking-history", headers=headers_admin)
     assert res.status_code == 200
     body = res.json()
     assert body["user_id"] == user["id"]

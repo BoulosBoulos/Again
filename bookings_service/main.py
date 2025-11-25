@@ -1,8 +1,11 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status, Request, APIRouter
+from fastapi.responses import JSONResponse
+
 from sqlalchemy.orm import Session
+from .rate_limiter import booking_rate_limiter
 
 from . import models, schemas
 from .auth import get_current_user_claims, require_roles
@@ -12,6 +15,37 @@ from .database import Base, engine, get_db
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Bookings Service", version="1.0.0")
+router_v1 = APIRouter(prefix="/api/v1")
+
+SERVICE_NAME = "bookings"
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": 500,
+            "detail": "Internal server error",
+        },
+    )
 
 
 @app.get("/")
@@ -116,7 +150,7 @@ def has_conflict(
 # ---------- Check room availability ----------
 
 
-@app.get("/bookings/availability")
+@router_v1.get("/bookings/availability")
 def check_availability(
     room_id: int,
     start_time: datetime,
@@ -166,10 +200,11 @@ def check_availability(
 # ---------- Create booking (regular / power users) ----------
 
 
-@app.post(
+@router_v1.post(
     "/bookings",
     response_model=schemas.BookingRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(booking_rate_limiter)],
 )
 def create_booking(
     booking_in: schemas.BookingCreate,
@@ -246,7 +281,7 @@ def create_booking(
 # ---------- My bookings (current user) ----------
 
 
-@app.get("/bookings/me", response_model=List[schemas.BookingRead])
+@router_v1.get("/bookings/me", response_model=List[schemas.BookingRead])
 def list_my_bookings(
     db: Session = Depends(get_db),
     claims: Dict = Depends(get_current_user_claims),
@@ -290,7 +325,7 @@ def list_my_bookings(
 # ---------- Admin / facility / auditor / service: list all bookings ----------
 
 
-@app.get("/bookings", response_model=List[schemas.BookingRead])
+@router_v1.get("/bookings", response_model=List[schemas.BookingRead])
 def list_all_bookings(
     room_id: Optional[int] = Query(default=None, ge=1),
     user_id: Optional[int] = Query(default=None, ge=1),
@@ -332,7 +367,7 @@ def list_all_bookings(
 # ---------- Update booking (time/room/status) ----------
 
 
-@app.put("/bookings/{booking_id}", response_model=schemas.BookingRead)
+@router_v1.put("/bookings/{booking_id}", response_model=schemas.BookingRead, dependencies=[Depends(booking_rate_limiter)])
 def update_booking(
     booking_id: int,
     update_data: schemas.BookingUpdate,
@@ -445,7 +480,7 @@ def update_booking(
 # ---------- Cancel booking (soft) ----------
 
 
-@app.delete("/bookings/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.delete("/bookings/{booking_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(booking_rate_limiter)])
 def cancel_booking(
     booking_id: int,
     db: Session = Depends(get_db),
@@ -510,3 +545,5 @@ def cancel_booking(
     db.add(booking)
     db.commit()
     return
+
+app.include_router(router_v1)

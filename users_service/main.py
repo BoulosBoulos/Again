@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status, Request, APIRouter
+from fastapi.responses import JSONResponse
+
+from .circuit_breaker import bookings_circuit_breaker
+from .rate_limiter import ip_rate_limiter
+
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -24,6 +29,8 @@ from .auth import SECRET_KEY, ALGORITHM
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Users Service", version="1.0.0")
+SERVICE_NAME = "users"
+router_v1 = APIRouter(prefix="/api/v1")
 
 BOOKINGS_SERVICE_URL = os.getenv(
     "BOOKINGS_SERVICE_URL",
@@ -33,6 +40,34 @@ BOOKINGS_SERVICE_URL = os.getenv(
 SERVICE_ACCOUNT_USERNAME = "users_service"
 SERVICE_ACCOUNT_USER_ID = 0        # "fake" ID for the service account
 SERVICE_ACCOUNT_ROLE = "service_account"   # least-privilege
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    # Optional: log exc here later
+    return JSONResponse(
+        status_code=500,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": 500,
+            "detail": "Internal server error",
+        },
+    )
 
 def make_service_account_token() -> str:
     payload = {
@@ -89,10 +124,11 @@ def validate_password_strength(password: str):
     
 # ---------- Registration ----------
 
-@app.post(
+@router_v1.post(
     "/users/register",
     response_model=schemas.UserRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(ip_rate_limiter)],
 )
 def register_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
     """
@@ -162,7 +198,7 @@ def register_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
 
 # ---------- Login (token) ----------
 
-@app.post("/users/login", response_model=schemas.Token)
+@router_v1.post("/users/login", response_model=schemas.Token, dependencies=[Depends(ip_rate_limiter)])
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
@@ -212,7 +248,7 @@ def login(
 
 # ---------- Current user profile (Regular user) ----------
 
-@app.get("/users/me", response_model=schemas.UserRead)
+@router_v1.get("/users/me", response_model=schemas.UserRead)
 def get_my_profile(current_user: models.User = Depends(get_current_user)):
     """
     Retrieve the authenticated user's own profile.
@@ -230,7 +266,7 @@ def get_my_profile(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
-@app.put("/users/me", response_model=schemas.UserRead)
+@router_v1.put("/users/me", response_model=schemas.UserRead)
 def update_my_profile(
     update_data: schemas.UserUpdate,
     db: Session = Depends(get_db),
@@ -295,7 +331,7 @@ def update_my_profile(
     return current_user
 
 
-@app.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_my_account(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -367,7 +403,7 @@ admin_or_auditor = require_roles([UserRole.ADMIN, UserRole.AUDITOR])
 
 # ---------- Admin: list users, get by username, delete ----------
 
-@app.get("/users", response_model=List[schemas.UserRead])
+@router_v1.get("/users", response_model=List[schemas.UserRead])
 def list_users(
     db: Session = Depends(get_db),
     _: models.User = Depends(admin_or_auditor),
@@ -394,7 +430,7 @@ def list_users(
     return users
 
 
-@app.get("/users/{username}", response_model=schemas.UserRead)
+@router_v1.get("/users/{username}", response_model=schemas.UserRead)
 def get_user_by_username_admin(
     username: str,
     db: Session = Depends(get_db),
@@ -432,7 +468,7 @@ def get_user_by_username_admin(
     return user
 
 
-@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_admin(
     user_id: int,
     db: Session = Depends(get_db),
@@ -467,7 +503,7 @@ def delete_user_admin(
     return
 
 
-@app.put("/users/{user_id}/role", response_model=schemas.UserRead)
+@router_v1.put("/users/{user_id}/role", response_model=schemas.UserRead)
 def change_user_role(
     user_id: int,
     role_update: schemas.UserRoleUpdate,
@@ -508,7 +544,7 @@ def change_user_role(
     db.refresh(user)
     return user
 
-@app.post("/users/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.post("/users/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
 def reset_user_password(
     user_id: int,
     body: schemas.PasswordReset,
@@ -554,82 +590,66 @@ def reset_user_password(
 
 # ---------- Booking history (stub for now) ----------
 
-@app.get("/users/{user_id}/booking-history")
+@router_v1.get("/users/{user_id}/booking-history")
 def get_user_booking_history(
     user_id: int,
     current_user: models.User = Depends(get_current_user),
 ):
-    """
-    Retrieve a user's full booking history via the Bookings service.
-
-    Access Rules
-    ------------
-    - Admin & Auditor: may view any user's history.
-    - Regular user: may view only their own history.
-
-    Implementation Notes
-    --------------------
-    - Generates a service-account JWT.
-    - Calls Bookings service: GET /bookings?user_id=<id>
-
-    Parameters
-    ----------
-    user_id : int
-        User whose history is requested.
-    current_user : User
-        Requesting user.
-
-    Returns
-    -------
-    dict
-        { "user_id": int, "bookings": list }
-
-    Raises
-    ------
-    HTTPException
-        If unauthorized or Bookings service errors.
-    """
-    # RBAC: only self OR admin/auditor
+    ...
+    # RBAC checks (as you already have)
     if current_user.role in (UserRole.ADMIN, UserRole.AUDITOR, UserRole.FACILITY_MANAGER):
-        pass  # can view any user
+        pass
     elif current_user.role == UserRole.REGULAR and current_user.id == user_id:
-        pass  # own history
+        pass
     else:
         raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Not allowed to view booking history for this user",
-    )
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to view booking history for this user",
+        )
 
+    # ---- CIRCUIT BREAKER CHECK ----
+    if not bookings_circuit_breaker.allow_request():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bookings service temporarily unavailable (circuit open)",
+        )
 
     token = make_service_account_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     try:
         response = httpx.get(
-            f"{BOOKINGS_SERVICE_URL}/bookings",
+            f"{BOOKINGS_SERVICE_URL}/api/v1/bookings",
             params={"user_id": user_id},
             headers=headers,
             timeout=5.0,
         )
     except httpx.RequestError:
+        # record failure and raise
+        bookings_circuit_breaker.record_failure()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to contact bookings service",
         )
 
     if response.status_code != 200:
+        bookings_circuit_breaker.record_failure()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Bookings service returned an error",
         )
 
+    # success
+    bookings_circuit_breaker.record_success()
     bookings = response.json()
     return {
         "user_id": user_id,
         "bookings": bookings,
     }
 
-@app.put("/users/{user_id}", response_model=schemas.UserRead)
+
+
+@router_v1.put("/users/{user_id}", response_model=schemas.UserRead)
 def admin_update_user(
     user_id: int,
     update_data: schemas.UserUpdate,
@@ -686,4 +706,6 @@ def admin_update_user(
     db.commit()
     db.refresh(user)
     return user
+
+app.include_router(router_v1)
 

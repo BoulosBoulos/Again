@@ -44,7 +44,7 @@ def test_create_room_requires_auth():
         "equipment": "projector",
         "location": "Building A",
     }
-    res = client.post("/rooms", json=payload)
+    res = client.post("/api/v1/rooms", json=payload)
     assert res.status_code == 403
 
 
@@ -57,7 +57,7 @@ def test_regular_user_cannot_create_room():
         "equipment": "projector",
         "location": "Building A",
     }
-    res = client.post("/rooms", json=payload, headers=headers)
+    res = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res.status_code == 403
 
 
@@ -70,7 +70,7 @@ def test_admin_can_create_room():
         "equipment": "projector,whiteboard",
         "location": "Building A - Floor 1",
     }
-    res = client.post("/rooms", json=payload, headers=headers)
+    res = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res.status_code == 201
     body = res.json()
     assert body["name"] == "Conf A"
@@ -96,20 +96,20 @@ def test_list_rooms_requires_auth_and_excludes_out_of_service():
         "location": "Building A",
     }
 
-    res1 = client.post("/rooms", json=r1, headers=headers)
+    res1 = client.post("/api/v1/rooms", json=r1, headers=headers)
     assert res1.status_code == 201
 
-    res2 = client.post("/rooms", json=r2, headers=headers)
+    res2 = client.post("/api/v1/rooms", json=r2, headers=headers)
     assert res2.status_code == 201
     room_oos_id = res2.json()["id"]
 
     update_payload = {"is_out_of_service": True}
-    res_update = client.put(f"/rooms/{room_oos_id}", json=update_payload, headers=headers)
+    res_update = client.put(f"/api/v1/rooms/{room_oos_id}", json=update_payload, headers=headers)
     assert res_update.status_code == 200
     assert res_update.json()["is_out_of_service"] is True
 
     # list requires auth (viewer_roles)
-    res_list = client.get("/rooms", headers=headers)
+    res_list = client.get("/api/v1/rooms", headers=headers)
     assert res_list.status_code == 200
     rooms = res_list.json()
     names = {r["name"] for r in rooms}
@@ -128,18 +128,18 @@ def test_admin_can_delete_room_soft():
         "equipment": "projector",
         "location": "Building X",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
-    res_delete = client.delete(f"/rooms/{room_id}", headers=headers)
+    res_delete = client.delete(f"/api/v1/rooms/{room_id}", headers=headers)
     assert res_delete.status_code == 204
 
     # get also requires auth; should now be 404 because room is inactive
-    res_get = client.get(f"/rooms/{room_id}", headers=headers)
+    res_get = client.get(f"/api/v1/rooms/{room_id}", headers=headers)
     assert res_get.status_code == 404
 
-    res_list = client.get("/rooms", headers=headers)
+    res_list = client.get("/api/v1/rooms", headers=headers)
     assert res_list.status_code == 200
     rooms = res_list.json()
     ids = {r["id"] for r in rooms}
@@ -163,13 +163,13 @@ def test_room_filters_by_capacity_location_and_equipment():
         "location": "Building A - Floor 1",
     }
 
-    res1 = client.post("/rooms", json=r1, headers=headers)
+    res1 = client.post("/api/v1/rooms", json=r1, headers=headers)
     assert res1.status_code == 201
-    res2 = client.post("/rooms", json=r2, headers=headers)
+    res2 = client.post("/api/v1/rooms", json=r2, headers=headers)
     assert res2.status_code == 201
 
     res = client.get(
-        "/rooms",
+        "/api/v1/rooms",
         params={
             "min_capacity": 10,
             "location": "Building A",
@@ -195,14 +195,14 @@ def test_facility_manager_can_create_and_update_room():
         "equipment": "whiteboard",
         "location": "Building C",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res_create.status_code == 201
     room = res_create.json()
     room_id = room["id"]
 
     # update
     update_payload = {"capacity": 12, "equipment": "whiteboard,projector"}
-    res_update = client.put(f"/rooms/{room_id}", json=update_payload, headers=headers)
+    res_update = client.put(f"/api/v1/rooms/{room_id}", json=update_payload, headers=headers)
     assert res_update.status_code == 200
     updated = res_update.json()
     assert updated["capacity"] == 12
@@ -226,15 +226,15 @@ def test_update_room_name_to_existing_one_fails():
         "location": "A",
     }
 
-    res1 = client.post("/rooms", json=r1, headers=headers)
-    res2 = client.post("/rooms", json=r2, headers=headers)
+    res1 = client.post("/api/v1/rooms", json=r1, headers=headers)
+    res2 = client.post("/api/v1/rooms", json=r2, headers=headers)
     assert res1.status_code == 201
     assert res2.status_code == 201
 
     room2_id = res2.json()["id"]
 
     res_update = client.put(
-        f"/rooms/{room2_id}",
+        f"/api/v1/rooms/{room2_id}",
         json={"name": "Room1"},
         headers=headers,
     )
@@ -253,19 +253,19 @@ def test_room_status_available_and_out_of_service():
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=r1, headers=headers)
+    res_create = client.post("/api/v1/rooms", json=r1, headers=headers)
     assert res_create.status_code == 201
     room = res_create.json()
     room_id = room["id"]
 
     # default status should be 'available' (room_status requires viewer_roles)
-    res_status = client.get(f"/rooms/{room_id}/status", headers=headers)
+    res_status = client.get(f"/api/v1/rooms/{room_id}/status", headers=headers)
     assert res_status.status_code == 200
     assert res_status.json()["status"] == "available"
 
     # mark out_of_service
     res_update = client.put(
-        f"/rooms/{room_id}",
+        f"/api/v1/rooms/{room_id}",
         json={"is_out_of_service": True},
         headers=headers,
     )
@@ -273,7 +273,7 @@ def test_room_status_available_and_out_of_service():
     assert res_update.json()["is_out_of_service"] is True
 
     # now status should be 'out_of_service'
-    res_status2 = client.get(f"/rooms/{room_id}/status", headers=headers)
+    res_status2 = client.get(f"/api/v1/rooms/{room_id}/status", headers=headers)
     assert res_status2.status_code == 200
     assert res_status2.json()["status"] == "out_of_service"
 
@@ -282,7 +282,7 @@ def test_get_nonexistent_room_returns_404():
     token = make_token("admin1", "admin")
     headers = {"Authorization": f"Bearer {token}"}
 
-    res = client.get("/rooms/9999", headers=headers)
+    res = client.get("/api/v1/rooms/9999", headers=headers)
     assert res.status_code == 404
 
 
@@ -297,7 +297,7 @@ def test_room_status_uses_bookings_availability(monkeypatch):
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
@@ -322,7 +322,7 @@ def test_room_status_uses_bookings_availability(monkeypatch):
 
     now = datetime.now(timezone.utc)
     res_status = client.get(
-        f"/rooms/{room_id}/status",
+        f"/api/v1/rooms/{room_id}/status",
         params={
             "start_time": (now + timedelta(hours=1)).isoformat(),
             "end_time": (now + timedelta(hours=2)).isoformat(),
@@ -344,12 +344,12 @@ def test_get_room_requires_auth():
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers_admin)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
     # try to get without auth → 403 (HTTPBearer)
-    res_get = client.get(f"/rooms/{room_id}")
+    res_get = client.get(f"/api/v1/rooms/{room_id}")
     assert res_get.status_code == 403
 
 
@@ -363,7 +363,7 @@ def test_regular_user_can_view_rooms_and_details():
         "equipment": "whiteboard",
         "location": "Building B",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers_admin)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
@@ -371,12 +371,12 @@ def test_regular_user_can_view_rooms_and_details():
     user_token = make_token("user1", "regular")
     headers_user = {"Authorization": f"Bearer {user_token}"}
 
-    res_list = client.get("/rooms", headers=headers_user)
+    res_list = client.get("/api/v1/rooms", headers=headers_user)
     assert res_list.status_code == 200
     ids = {r["id"] for r in res_list.json()}
     assert room_id in ids
 
-    res_get = client.get(f"/rooms/{room_id}", headers=headers_user)
+    res_get = client.get(f"/api/v1/rooms/{room_id}", headers=headers_user)
     assert res_get.status_code == 200
     assert res_get.json()["name"] == "Viewable Room"
 
@@ -391,7 +391,7 @@ def test_moderator_cannot_view_rooms_or_status():
         "equipment": "projector",
         "location": "Building C",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers_admin)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
@@ -399,15 +399,15 @@ def test_moderator_cannot_view_rooms_or_status():
     headers_mod = {"Authorization": f"Bearer {mod_token}"}
 
     # moderator cannot list rooms
-    res_list = client.get("/rooms", headers=headers_mod)
+    res_list = client.get("/api/v1/rooms", headers=headers_mod)
     assert res_list.status_code == 403
 
     # moderator cannot view room details
-    res_get = client.get(f"/rooms/{room_id}", headers=headers_mod)
+    res_get = client.get(f"/api/v1/rooms/{room_id}", headers=headers_mod)
     assert res_get.status_code == 403
 
     # moderator cannot view room status
-    res_status = client.get(f"/rooms/{room_id}/status", headers=headers_mod)
+    res_status = client.get(f"/api/v1/rooms/{room_id}/status", headers=headers_mod)
     assert res_status.status_code == 403
 
 def test_create_room_with_duplicate_name_fails():
@@ -420,11 +420,11 @@ def test_create_room_with_duplicate_name_fails():
         "equipment": "projector",
         "location": "Building A",
     }
-    res1 = client.post("/rooms", json=payload, headers=headers)
+    res1 = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res1.status_code == 201
 
     # second with same name → 400
-    res2 = client.post("/rooms", json=payload, headers=headers)
+    res2 = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res2.status_code == 400
     assert "already exists" in res2.json()["detail"].lower()
 
@@ -438,14 +438,14 @@ def test_room_status_invalid_time_range_returns_400():
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
     now = datetime.now(timezone.utc)
     # end_time <= start_time
     res_status = client.get(
-        f"/rooms/{room_id}/status",
+        f"/api/v1/rooms/{room_id}/status",
         params={
             "start_time": (now + timedelta(hours=2)).isoformat(),
             "end_time": (now + timedelta(hours=1)).isoformat(),
@@ -466,16 +466,16 @@ def test_room_status_deleted_room_returns_404():
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
     # soft-delete
-    res_delete = client.delete(f"/rooms/{room_id}", headers=headers)
+    res_delete = client.delete(f"/api/v1/rooms/{room_id}", headers=headers)
     assert res_delete.status_code == 204
 
     # status on inactive room → 404
-    res_status = client.get(f"/rooms/{room_id}/status", headers=headers)
+    res_status = client.get(f"/api/v1/rooms/{room_id}/status", headers=headers)
     assert res_status.status_code == 404
 
 def test_regular_user_cannot_update_or_delete_room():
@@ -488,7 +488,7 @@ def test_regular_user_cannot_update_or_delete_room():
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers_admin)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
@@ -497,13 +497,13 @@ def test_regular_user_cannot_update_or_delete_room():
     headers_user = {"Authorization": f"Bearer {user_token}"}
 
     res_update = client.put(
-        f"/rooms/{room_id}",
+        f"/api/v1/rooms/{room_id}",
         json={"capacity": 99},
         headers=headers_user,
     )
     assert res_update.status_code == 403
 
-    res_delete = client.delete(f"/rooms/{room_id}", headers=headers_user)
+    res_delete = client.delete(f"/api/v1/rooms/{room_id}", headers=headers_user)
     assert res_delete.status_code == 403
 
 
@@ -517,7 +517,7 @@ def test_auditor_cannot_modify_rooms():
         "equipment": "projector",
         "location": "Building A",
     }
-    res_create = client.post("/rooms", json=payload, headers=headers_admin)
+    res_create = client.post("/api/v1/rooms", json=payload, headers=headers_admin)
     assert res_create.status_code == 201
     room_id = res_create.json()["id"]
 
@@ -526,16 +526,16 @@ def test_auditor_cannot_modify_rooms():
     headers_aud = {"Authorization": f"Bearer {auditor_token}"}
 
     # auditor CAN view rooms (viewer_roles)
-    res_list = client.get("/rooms", headers=headers_aud)
+    res_list = client.get("/api/v1/rooms", headers=headers_aud)
     assert res_list.status_code == 200
 
     # but CANNOT update or delete
     res_update = client.put(
-        f"/rooms/{room_id}",
+        f"/api/v1/rooms/{room_id}",
         json={"capacity": 20},
         headers=headers_aud,
     )
     assert res_update.status_code == 403
 
-    res_delete = client.delete(f"/rooms/{room_id}", headers=headers_aud)
+    res_delete = client.delete(f"/api/v1/rooms/{room_id}", headers=headers_aud)
     assert res_delete.status_code == 403

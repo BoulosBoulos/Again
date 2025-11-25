@@ -3,7 +3,11 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt
 from .auth import SECRET_KEY, ALGORITHM
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status, Request, APIRouter
+from fastapi.responses import JSONResponse
+
+from .circuit_breaker import bookings_circuit_breaker
+
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -17,6 +21,10 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Rooms Service", version="1.0.0")
 
+router_v1 = APIRouter(prefix="/api/v1")
+
+SERVICE_NAME = "rooms"
+
 SERVICE_ACCOUNT_USERNAME = "rooms_service"
 SERVICE_ACCOUNT_USER_ID = 0
 SERVICE_ACCOUNT_ROLE = "service_account"
@@ -25,6 +33,34 @@ BOOKINGS_SERVICE_URL = os.getenv(
     "BOOKINGS_SERVICE_URL",
     "http://bookings_service:8002",  # Docker internal URL
 )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "service": SERVICE_NAME,
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": 500,
+            "detail": "Internal server error",
+        },
+    )
 
 
 @app.get("/")
@@ -62,7 +98,7 @@ def make_service_account_token() -> str:
 # ---------- Create room ----------
 
 
-@app.post("/rooms", response_model=schemas.RoomRead, status_code=status.HTTP_201_CREATED)
+@router_v1.post("/rooms", response_model=schemas.RoomRead, status_code=status.HTTP_201_CREATED)
 def create_room(
     room_in: schemas.RoomCreate,
     db: Session = Depends(get_db),
@@ -120,7 +156,7 @@ def create_room(
 # ---------- List / search rooms ----------
 
 
-@app.get("/rooms", response_model=List[schemas.RoomRead])
+@router_v1.get("/rooms", response_model=List[schemas.RoomRead])
 def list_rooms(
     min_capacity: Optional[int] = Query(default=None, ge=1),
     location: Optional[str] = None,
@@ -172,7 +208,7 @@ def list_rooms(
     return query.all()
 
 
-@app.get("/rooms/{room_id}", response_model=schemas.RoomRead)
+@router_v1.get("/rooms/{room_id}", response_model=schemas.RoomRead)
 def get_room(
     room_id: int,
     db: Session = Depends(get_db),
@@ -207,7 +243,7 @@ def get_room(
 # ---------- Update / delete rooms (admin or facility manager) ----------
 
 
-@app.put("/rooms/{room_id}", response_model=schemas.RoomRead)
+@router_v1.put("/rooms/{room_id}", response_model=schemas.RoomRead)
 def update_room(
     room_id: int,
     update_data: schemas.RoomUpdate,
@@ -277,7 +313,7 @@ def update_room(
     return room
 
 
-@app.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router_v1.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_room(
     room_id: int,
     db: Session = Depends(get_db),
@@ -324,7 +360,7 @@ def delete_room(
 # ---------- Room status (stub for now) ----------
 
 
-@app.get("/rooms/{room_id}/status")
+@router_v1.get("/rooms/{room_id}/status")
 def room_status(
     room_id: int,
     start_time: Optional[datetime] = None,
@@ -374,9 +410,16 @@ def room_status(
     token = make_service_account_token()
     headers = {"Authorization": f"Bearer {token}"}
 
+    # ---- CIRCUIT BREAKER CHECK ----
+    if not bookings_circuit_breaker.allow_request():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bookings service temporarily unavailable (circuit open)",
+        )
+
     try:
         resp = httpx.get(
-            f"{BOOKINGS_SERVICE_URL}/bookings/availability",
+            f"{BOOKINGS_SERVICE_URL}/api/v1/bookings/availability",
             params={
                 "room_id": room.id,
                 "start_time": start_time.isoformat(),
@@ -386,18 +429,24 @@ def room_status(
             timeout=5.0,
         )
     except httpx.RequestError:
+        bookings_circuit_breaker.record_failure()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to contact bookings service for availability",
         )
 
     if resp.status_code != 200:
+        bookings_circuit_breaker.record_failure()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Bookings service returned an error when checking availability",
         )
 
+    bookings_circuit_breaker.record_success()
+
     data = resp.json()
     status_str = "available" if data.get("available") else "booked"
 
     return {"room_id": room.id, "status": status_str}
+
+app.include_router(router_v1)

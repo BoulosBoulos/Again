@@ -48,7 +48,7 @@ def test_regular_user_can_create_booking():
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
 
-    res = client.post("/bookings", json=body, headers=headers)
+    res = client.post("/api/v1/bookings", json=body, headers=headers)
     assert res.status_code == 201
     data = res.json()
     assert data["user_id"] == 1
@@ -72,10 +72,10 @@ def test_cannot_create_overlapping_booking():
         "end_time": (now + timedelta(hours=2, minutes=30)).isoformat(),
     }
 
-    res1 = client.post("/bookings", json=body1, headers=headers)
+    res1 = client.post("/api/v1/bookings", json=body1, headers=headers)
     assert res1.status_code == 201
 
-    res2 = client.post("/bookings", json=body2, headers=headers)
+    res2 = client.post("/api/v1/bookings", json=body2, headers=headers)
     assert res2.status_code == 400
     assert "already booked" in res2.json()["detail"].lower()
 
@@ -91,7 +91,7 @@ def test_list_my_bookings_filters_by_user():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res1 = client.post("/bookings", json=body_user1, headers=headers_user1)
+    res1 = client.post("/api/v1/bookings", json=body_user1, headers=headers_user1)
     assert res1.status_code == 201
 
     # user2 creates booking in a DIFFERENT room (no conflict)
@@ -102,11 +102,11 @@ def test_list_my_bookings_filters_by_user():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res2 = client.post("/bookings", json=body_user2, headers=headers_user2)
+    res2 = client.post("/api/v1/bookings", json=body_user2, headers=headers_user2)
     assert res2.status_code == 201
 
     # user1 lists "my" bookings → should only see their own
-    res_me = client.get("/bookings/me", headers=headers_user1)
+    res_me = client.get("/api/v1/bookings/me", headers=headers_user1)
     assert res_me.status_code == 200
     bookings_me = res_me.json()
     assert all(b["user_id"] == 1 for b in bookings_me)
@@ -124,7 +124,7 @@ def test_admin_can_list_all_bookings():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res1 = client.post("/bookings", json=body1, headers=headers_user1)
+    res1 = client.post("/api/v1/bookings", json=body1, headers=headers_user1)
     assert res1.status_code == 201
 
     # user2 booking later (no overlap)
@@ -135,14 +135,14 @@ def test_admin_can_list_all_bookings():
         "start_time": (now + timedelta(hours=3)).isoformat(),
         "end_time": (now + timedelta(hours=4)).isoformat(),
     }
-    res2 = client.post("/bookings", json=body2, headers=headers_user2)
+    res2 = client.post("/api/v1/bookings", json=body2, headers=headers_user2)
     assert res2.status_code == 201
 
     # admin lists all bookings
     token_admin = make_token(user_id=999, username="admin1", role="admin")
     headers_admin = {"Authorization": f"Bearer {token_admin}"}
 
-    res = client.get("/bookings", headers=headers_admin)
+    res = client.get("/api/v1/bookings", headers=headers_admin)
     assert res.status_code == 200
     all_bookings = res.json()
     assert len(all_bookings) >= 2
@@ -158,15 +158,15 @@ def test_owner_can_cancel_own_booking():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res_create = client.post("/bookings", json=body, headers=headers_user1)
+    res_create = client.post("/api/v1/bookings", json=body, headers=headers_user1)
     assert res_create.status_code == 201
     booking_id = res_create.json()["id"]
 
-    res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_user1)
+    res_delete = client.delete(f"/api/v1/bookings/{booking_id}", headers=headers_user1)
     assert res_delete.status_code == 204
 
     # overlapping booking should now be allowed (since previous is cancelled)
-    res_new = client.post("/bookings", json=body, headers=headers_user1)
+    res_new = client.post("/api/v1/bookings", json=body, headers=headers_user1)
     assert res_new.status_code == 201
 
 
@@ -182,7 +182,7 @@ def test_update_booking_enforces_conflicts():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res1 = client.post("/bookings", json=body1, headers=headers)
+    res1 = client.post("/api/v1/bookings", json=body1, headers=headers)
     assert res1.status_code == 201
     booking1 = res1.json()
 
@@ -192,7 +192,7 @@ def test_update_booking_enforces_conflicts():
         "start_time": (now + timedelta(hours=3)).isoformat(),
         "end_time": (now + timedelta(hours=4)).isoformat(),
     }
-    res2 = client.post("/bookings", json=body2, headers=headers)
+    res2 = client.post("/api/v1/bookings", json=body2, headers=headers)
     assert res2.status_code == 201
     booking2 = res2.json()
 
@@ -201,7 +201,7 @@ def test_update_booking_enforces_conflicts():
         "start_time": (now + timedelta(hours=1, minutes=30)).isoformat(),
         "end_time": (now + timedelta(hours=2, minutes=30)).isoformat(),
     }
-    res_update = client.put(f"/bookings/{booking2['id']}", json=update_body, headers=headers)
+    res_update = client.put(f"/api/v1/bookings/{booking2['id']}", json=update_body, headers=headers)
     assert res_update.status_code == 400
     assert "already booked" in res_update.json()["detail"].lower()
 
@@ -217,12 +217,12 @@ def test_check_availability_endpoint():
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
     # create a booking to block the slot
-    res = client.post("/bookings", json=booking_body, headers=headers)
+    res = client.post("/api/v1/bookings", json=booking_body, headers=headers)
     assert res.status_code == 201
 
     # check overlapping interval -> not available
     res_busy = client.get(
-        "/bookings/availability",
+        "/api/v1/bookings/availability",
         params={
             "room_id": 1,
             "start_time": (now + timedelta(hours=1, minutes=30)).isoformat(),
@@ -237,7 +237,7 @@ def test_check_availability_endpoint():
 
     # check non-overlapping interval -> available
     res_free = client.get(
-        "/bookings/availability",
+        "/api/v1/bookings/availability",
         params={
             "room_id": 1,
             "start_time": (now + timedelta(hours=3)).isoformat(),
@@ -260,13 +260,13 @@ def test_availability_requires_auth_and_moderator_forbidden():
     }
 
     # no token → 403 (HTTPBearer)
-    res_no_auth = client.get("/bookings/availability", params=params)
+    res_no_auth = client.get("/api/v1/bookings/availability", params=params)
     assert res_no_auth.status_code == 403
 
     # moderator role is NOT in availability_roles → 403
     mod_token = make_token(user_id=3, username="mod1", role="moderator")
     headers_mod = {"Authorization": f"Bearer {mod_token}"}
-    res_mod = client.get("/bookings/availability", params=params, headers=headers_mod)
+    res_mod = client.get("/api/v1/bookings/availability", params=params, headers=headers_mod)
     assert res_mod.status_code == 403
 
 
@@ -277,7 +277,7 @@ def test_availability_invalid_time_range_returns_400():
     now = datetime.now(timezone.utc)
     # end <= start
     res = client.get(
-        "/bookings/availability",
+        "/api/v1/bookings/availability",
         params={
             "room_id": 1,
             "start_time": (now + timedelta(hours=2)).isoformat(),
@@ -301,22 +301,22 @@ def test_auditor_cannot_create_or_modify_bookings():
     }
 
     # cannot create
-    res_create = client.post("/bookings", json=body, headers=headers_aud)
+    res_create = client.post("/api/v1/bookings", json=body, headers=headers_aud)
     assert res_create.status_code == 403
 
     # prepare a booking with a regular user
     token_user = make_token(user_id=1, username="user1", role="regular")
     headers_user = {"Authorization": f"Bearer {token_user}"}
-    res = client.post("/bookings", json=body, headers=headers_user)
+    res = client.post("/api/v1/bookings", json=body, headers=headers_user)
     assert res.status_code == 201
     booking_id = res.json()["id"]
 
     # auditor cannot update
-    res_update = client.put(f"/bookings/{booking_id}", json={"room_id": 2}, headers=headers_aud)
+    res_update = client.put(f"/api/v1/bookings/{booking_id}", json={"room_id": 2}, headers=headers_aud)
     assert res_update.status_code == 403
 
     # auditor cannot cancel
-    res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_aud)
+    res_delete = client.delete(f"/api/v1/bookings/{booking_id}", headers=headers_aud)
     assert res_delete.status_code == 403
 
 
@@ -331,7 +331,7 @@ def test_regular_user_cannot_modify_others_booking():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res_create = client.post("/bookings", json=body, headers=headers_user1)
+    res_create = client.post("/api/v1/bookings", json=body, headers=headers_user1)
     assert res_create.status_code == 201
     booking_id = res_create.json()["id"]
 
@@ -340,13 +340,13 @@ def test_regular_user_cannot_modify_others_booking():
     headers_user2 = {"Authorization": f"Bearer {token_user2}"}
 
     res_update = client.put(
-        f"/bookings/{booking_id}",
+        f"/api/v1/bookings/{booking_id}",
         json={"room_id": 2},
         headers=headers_user2,
     )
     assert res_update.status_code == 403
 
-    res_delete = client.delete(f"/bookings/{booking_id}", headers=headers_user2)
+    res_delete = client.delete(f"/api/v1/bookings/{booking_id}", headers=headers_user2)
     assert res_delete.status_code == 403
 
 
@@ -361,7 +361,7 @@ def test_admin_can_update_booking_status():
         "start_time": (now + timedelta(hours=1)).isoformat(),
         "end_time": (now + timedelta(hours=2)).isoformat(),
     }
-    res_create = client.post("/bookings", json=body, headers=headers_user)
+    res_create = client.post("/api/v1/bookings", json=body, headers=headers_user)
     assert res_create.status_code == 201
     booking_id = res_create.json()["id"]
 
@@ -370,7 +370,7 @@ def test_admin_can_update_booking_status():
     headers_admin = {"Authorization": f"Bearer {token_admin}"}
 
     res_update = client.put(
-        f"/bookings/{booking_id}",
+        f"/api/v1/bookings/{booking_id}",
         json={"status": "cancelled"},
         headers=headers_admin,
     )
@@ -388,6 +388,6 @@ def test_create_booking_with_invalid_time_fails():
         "start_time": (now + timedelta(hours=2)).isoformat(),
         "end_time": (now + timedelta(hours=1)).isoformat(),  # end < start
     }
-    res = client.post("/bookings", json=body, headers=headers)
+    res = client.post("/api/v1/bookings", json=body, headers=headers)
     assert res.status_code == 400
     assert "end_time must be after start_time" in res.json()["detail"]
