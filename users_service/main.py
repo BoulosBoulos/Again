@@ -10,6 +10,9 @@ from .rate_limiter import ip_rate_limiter
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from common.cache import get_cached_json, set_cached_json, delete_prefix
+
+
 from . import models, schemas
 from .auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -456,6 +459,11 @@ def get_user_by_username_admin(
     HTTPException
         If user does not exist.
     """
+
+    cache_key = f"user:username:{username}"
+    cached = get_cached_json(cache_key)
+    if cached is not None:
+        return cached
     user = (
         db.query(models.User)
         .filter(models.User.username == username)
@@ -465,6 +473,9 @@ def get_user_by_username_admin(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+    
+    data = schemas.UserRead.model_validate(user).model_dump()
+    set_cached_json(cache_key, data, ttl_seconds=300)
     return user
 
 
@@ -500,6 +511,9 @@ def delete_user_admin(
         )
     db.delete(user)
     db.commit()
+    # After successfully updating or deleting user
+    delete_prefix(f"user:{user_id}")
+
     return
 
 
