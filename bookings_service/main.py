@@ -7,6 +7,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from .rate_limiter import booking_rate_limiter
 
+from common.cache import delete_prefix
+
+
 from . import models, schemas
 from .auth import get_current_user_claims, require_roles
 from .database import Base, engine, get_db
@@ -275,6 +278,7 @@ def create_booking(
     db.add(booking)
     db.commit()
     db.refresh(booking)
+    delete_prefix("rooms:availability:")
     return booking
 
 
@@ -544,6 +548,7 @@ def cancel_booking(
     booking.status = models.BookingStatus.CANCELLED
     db.add(booking)
     db.commit()
+    delete_prefix("rooms:availability:")
     return
 
 app.include_router(router_v1)
