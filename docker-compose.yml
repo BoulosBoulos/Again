@@ -1,4 +1,4 @@
-﻿version: "3.9"
+version: "3.9"
 
 services:
   db:
@@ -20,6 +20,7 @@ services:
     container_name: users_service
     environment:
       DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+      REDIS_URL: redis://cache:6379/0
     depends_on:
       - db
     ports:
@@ -32,6 +33,7 @@ services:
     container_name: bookings_service
     environment:
       DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+      REDIS_URL: redis://cache:6379/0
     depends_on:
       - db
     ports:
@@ -44,6 +46,7 @@ services:
     container_name: rooms_service
     environment:
       DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+      REDIS_URL: redis://cache:6379/0
       BOOKINGS_SERVICE_URL: http://bookings_service:8002
     depends_on:
       - db
@@ -58,10 +61,19 @@ services:
     container_name: reviews_service
     environment:
       DATABASE_URL: postgresql+psycopg2://smart_user:smart_password@db:5432/smart_meeting
+      REDIS_URL: redis://cache:6379/0
     depends_on:
       - db
     ports:
       - "8003:8003"
+    
+  cache:
+    image: redis:7
+    container_name: smart_cache
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
 
 volumes:
   db_data:
