@@ -10,6 +10,9 @@ from .circuit_breaker import bookings_circuit_breaker
 
 from sqlalchemy.orm import Session
 
+from common.cache import get_cached_json, set_cached_json, delete_prefix
+
+
 from . import models, schemas
 from .auth import require_roles
 from .database import Base, engine, get_db
@@ -191,6 +194,18 @@ def list_rooms(
     List[RoomRead]
         List of rooms matching the filters.
     """
+    cacheable = (
+        min_capacity is None
+        and not location
+        and not equipment_contains
+    )
+
+    cache_key = "rooms:all"
+
+    if cacheable:
+        cached = get_cached_json(cache_key)
+        if cached is not None:
+            return cached
     query = db.query(models.Room).filter(models.Room.is_active.is_(True))
 
     if min_capacity is not None:
@@ -204,6 +219,11 @@ def list_rooms(
 
     # Exclude out-of-service rooms from "available" search
     query = query.filter(models.Room.is_out_of_service.is_(False))
+
+    if cacheable:
+        data = [schemas.RoomRead.model_validate(r).model_dump() for r in rooms]
+        set_cached_json(cache_key, data, ttl_seconds=60)
+        return data
 
     return query.all()
 
@@ -234,9 +254,15 @@ def get_room(
     HTTPException
         If the room does not exist or is inactive.
     """
+    cache_key = f"room:{room_id}"
+    cached = get_cached_json(cache_key)
+    if cached is not None:
+        return cached
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
     if not room or not room.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+    data = schemas.RoomRead.model_validate(room).model_dump()
+    set_cached_json(cache_key, data, ttl_seconds=300)
     return room
 
 
