@@ -220,12 +220,15 @@ def list_rooms(
     # Exclude out-of-service rooms from "available" search
     query = query.filter(models.Room.is_out_of_service.is_(False))
 
+    # Actually hit the DB
+    rooms = query.all()
+
     if cacheable:
         data = [schemas.RoomRead.model_validate(r).model_dump() for r in rooms]
         set_cached_json(cache_key, data, ttl_seconds=60)
         return data
 
-    return query.all()
+    return rooms
 
 
 @router_v1.get("/rooms/{room_id}", response_model=schemas.RoomRead)
@@ -263,7 +266,7 @@ def get_room(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
     data = schemas.RoomRead.model_validate(room).model_dump()
     set_cached_json(cache_key, data, ttl_seconds=300)
-    return room
+    return data
 
 
 # ---------- Update / delete rooms (admin or facility manager) ----------
